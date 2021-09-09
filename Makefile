@@ -10,10 +10,10 @@ $(NOVEL)/novel.pdf: $(NOVEL)/99/map.tex
 $(NOVEL)/99/map.tex: $(NOVEL)/99/map.png
 	for dir in $(NOVEL)/??; do \
 		cd $$dir; \
-		pandoc -t latex --chapters map.md -o map.tex; \
+		pandoc --top-level-division=chapter -t latex map.md -o map.tex; \
 		cd -; \
 	done
 
 $(NOVEL)/99/map.png:
-	python generate.py $(NOVEL)
+	python3 generate.py $(NOVEL)
 

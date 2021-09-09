@@ -9,19 +9,23 @@ import loremipsum
 
 from parsecom import *
 
+
 def retrying(f, max_tries=100):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        for _ in xrange(max_tries):
+        for _ in range(max_tries):
             try:
                 return f(*args, **kwargs)
             except AssertionError:
                 continue
         assert False
+
     return wrapper
+
 
 def caching(f):
     cache = {}
+
     @wraps(f)
     def wrapper(*args):
         try:
@@ -30,16 +34,17 @@ def caching(f):
             res = f(*args)
             cache[args] = res
             return res
+
     return wrapper
+
 
 def capital(word):
     return word[0].upper() + word[1:]
 
+
 def distinct(*args):
     return len(args) == len(set(args))
 
-
-# In[11]:
 
 class Generator(object):
     def __add__(self, other):
@@ -49,18 +54,19 @@ class Generator(object):
         r = repr(self).strip()
         if len(r) < wrap:
             return [r]
-        return ["***%s***" % self.__class__.__name__]
+        return [f"***{self.__class__.__name__}***"]
+
 
 class ConcatGen(Generator):
     def __init__(self, *gs):
         self.gs = [g for g in gs]
-    
+
     def __call__(self, director, **kwargs):
-        return ''.join(g(director, **kwargs) for g in self.gs)
+        return "".join(g(director, **kwargs) for g in self.gs)
 
     def __repr__(self):
-        return ''.join(repr(g) for g in self.gs)
-   
+        return "".join(repr(g) for g in self.gs)
+
     def pretty(self, wrap=80):
         lines = []
         line = ""
@@ -86,13 +92,13 @@ class ConcatGen(Generator):
             lines.append(line)
         return lines
 
+
 def concatgen(*gs):
     gens = []
     for g in gs:
         if isemptygen(g):
             continue
-        if gens and isinstance(gens[-1], LiteralGen) \
-                and isinstance(g, LiteralGen):
+        if gens and isinstance(gens[-1], LiteralGen) and isinstance(g, LiteralGen):
             newg = LiteralGen(gens[-1].value + g.value)
             gens[-1] = newg
 
@@ -100,37 +106,40 @@ def concatgen(*gs):
         return gs[0]
     return ConcatGen(*gs)
 
+
 class LiteralGen(Generator):
     def __init__(self, value):
         self.value = value
-    
+
     def __call__(self, director, **kwargs):
         director.literals.add(self.value.strip())
         return self.value
 
     def __repr__(self):
         return self.value
-   
+
+
 def isemptygen(g):
     return isinstance(g, LiteralGen) and not g.value
+
 
 class MaybeGen(Generator):
     def __init__(self, gen):
         self.gen = gen
-    
+
     def __call__(self, director, **kwargs):
         if random.random() < 0.5 ** 0.5:
             return self.gen(director, **kwargs)
-        return ''
+        return ""
 
     def __repr__(self):
-        return '[%s]' % repr(self.gen)
-    
-    
+        return f"[{self.gen|repr}]"
+
+
 class ChoiceGen(Generator):
     def __init__(self, *gs):
         self.gs = gs
-    
+
     def __call__(self, director, **kwargs):
         gs = director.shuffle(self.gs)
         for g in gs:
@@ -144,11 +153,11 @@ class ChoiceGen(Generator):
             for g2 in gs:
                 if g != g2:
                     director.mark_unused(g2)
-            return ret    
+            return ret
         assert False
-    
+
     def __repr__(self):
-        return '<' + '|'.join(repr(g) for g in self.gs) + '>'
+        return "<" + "|".join(repr(g) for g in self.gs) + ">"
 
     def pretty(self, wrap=80):
         r = repr(self)
@@ -157,7 +166,7 @@ class ChoiceGen(Generator):
         char = "<"
         lines = []
         for g in self.gs:
-            glines = g.pretty(wrap=wrap-1)
+            glines = g.pretty(wrap=wrap - 1)
             for gl in glines:
                 assert len(gl) < wrap, gl
                 lines.append(char + gl)
@@ -169,10 +178,11 @@ class ChoiceGen(Generator):
             lines.append(">")
         return lines
 
+
 class LookupGen(Generator):
     def __init__(self, name):
         self.name = name
-    
+
     def __call__(self, director, **kwargs):
         if self.name in director.kwargs:
             value = director.kwargs[self.name]
@@ -184,13 +194,14 @@ class LookupGen(Generator):
         return value
 
     def __repr__(self):
-        return '@' + self.name
+        return "@" + self.name
+
 
 class FunctionGen(Generator):
     def __init__(self, name, *args):
         self.name = name
         self.args = args
-    
+
     def __call__(self, director, **kwargs):
         current, director.current = director.current, self
         ret = director.functions[self.name](*self.args, **kwargs)
@@ -200,8 +211,6 @@ class FunctionGen(Generator):
     def __repr__(self):
         return r"\%s{%s}" % (self.name, "|".join(repr(a) for a in self.args))
 
-# In[12]:
-# In[23]:
 
 def combine(*gens):
     g = gens[0]
@@ -213,31 +222,39 @@ def combine(*gens):
     g = g + gens[0]
     return g
 
+
 def cleanup(txt):
-    txt = re.sub('\s+', ' ', txt) # remove multiple spaces
-    txt = re.sub(r' ([\.,;:!\?])', r'\1', txt) # remove space before punctuation
-    txt = re.sub(ur'a\(n\)\s*(\W+)([aeiouáéíóúäëïöü])', r'an \1\2', txt,
-            flags=re.UNICODE | re.IGNORECASE)
-    txt = re.sub(r'a\(n\)', r'a', txt)
+    txt = re.sub("\s+", " ", txt)  # remove multiple spaces
+    txt = re.sub(r" ([\.,;:!\?])", r"\1", txt)  # remove space before punctuation
+    txt = re.sub(
+        r"a\(n\)\s*(\W+)([aeiouáéíóúäëïöü])",
+        r"an \1\2",
+        txt,
+        flags=re.UNICODE | re.IGNORECASE,
+    )
+    txt = re.sub(r"a\(n\)", r"a", txt)
+
     def cap(m):
         pre = m.group(1) or ""
         return pre + m.group(2).upper()
-    txt = re.sub(r'\^(\W*)(.)', cap, txt,
-            flags=re.UNICODE) # capitalize after ^
+
+    txt = re.sub(r"\^(\W*)(.)", cap, txt, flags=re.UNICODE)  # capitalize after ^
     txt = txt.strip()
-    txt = re.sub('\s+', ' ', txt) # remove multiple spaces again
+    txt = re.sub("\s+", " ", txt)  # remove multiple spaces again
     return txt
+
 
 class Director(object):
     stdlib = []
+
     def __init__(self, *args):
         lexicon = defaultdict(list)
         for k, v in args:
             lexicon[k].append(v)
         self.lexicon = {}
-        for k, v in lexicon.iteritems():
+        for k, v in lexicon.items():
             if len(v) > 1:
-                print "Got %d definitions for %s" % (len(v), k)
+                print(f"Got {len(v)} definitions for {k}")
                 self.lexicon[k] = ChoiceGen(*v)
             else:
                 self.lexicon[k] = v[0]
@@ -263,6 +280,7 @@ class Director(object):
             def wrapped(*args, **kwargs):
                 def thunk(x):
                     return lambda: x(self, **kwargs)
+
                 args = list(args)
                 the_types = list(types)
                 new_args = []
@@ -279,26 +297,27 @@ class Director(object):
                     new_args.append(na)
                 ret = f(self, *new_args, **kwargs)
                 return ret
+
             self.functions[name] = wrapped
 
             return wrapped
-        
+
         return wrapper
-    
+
     def shuffle(self, items):
         items = list(items)
         items = sorted(items, key=lambda x: self.ages[x] + random.random())
         return items
-    
+
     def mark_used(self, item):
         self.ages[item] += 0.5
 
     def mark_unused(self, item):
         self.ages[item] *= 0.5
-    
+
     def __getitem__(self, key):
         return self.data[key]
-    
+
     def __setitem__(self, key, value):
         self.data[key] = value
 
@@ -306,8 +325,10 @@ class Director(object):
 def stdlib(*args):
     def wrapper(f):
         Director.stdlib.append((f, args))
+
     return wrapper
-   
+
+
 def wrapped(txt, width=80):
     lines = [""]
     words = txt.split()
@@ -318,17 +339,28 @@ def wrapped(txt, width=80):
         lines[-1] += (" " if lines[-1] else "") + word
     return "\n".join(lines)
 
+
 template = Forward()
 
 text = Regex(r"[^@#{}[\]\\|<>_\n]+") >> LiteralGen
 insert = (lit("@") & word) >> LookupGen
-literal = (lit("_") & Regex('.')) >> LiteralGen
-function = (lit("\\") & word & Maybe(lit("{") & Maybe(template & Many(lit("|") & template)) & lit("}"))) >> FunctionGen
+literal = (lit("_") & Regex(".")) >> LiteralGen
+function = (
+    lit("\\")
+    & word
+    & Maybe(lit("{") & Maybe(template & Many(lit("|") & template)) & lit("}"))
+) >> FunctionGen
 choice = (lit("<") & template & Many(lit("|") & template) & lit(">")) >> ChoiceGen
 option = (lit("[") & template & lit("]")) >> MaybeGen
 comment = (lit("#") & Regex(r"[^\n]*")) > LiteralGen(" ")
 linebreak = Regex(r"\n +") > LiteralGen(" ")
-template.p = Many(text | insert | literal | function | choice | option | comment | linebreak, allow_none=False) >> concatgen
+template.p = (
+    Many(
+        text | insert | literal | function | choice | option | comment | linebreak,
+        allow_none=False,
+    )
+    >> concatgen
+)
 defn = (word + lit("=") + template) >> tuplize
 parser = Many((defn & lit("\n")) | lit("\n") | ~comment) >> Director
 
@@ -347,6 +379,7 @@ _ - literal
 `
 """
 
+
 @stdlib("retry")
 def retry(director, gen):
     tries = 0
@@ -359,14 +392,17 @@ def retry(director, gen):
             if tries > 3:
                 raise
             director.data = old_data
-        
+
+
 @stdlib("ignore")
 def ignore(director, gen):
     return ""
 
+
 @stdlib("error")
 def error(director):
     raise Exception
+
 
 @stdlib("if")
 def if_(director, query, yes):
@@ -376,12 +412,14 @@ def if_(director, query, yes):
     else:
         return ""
 
+
 @stdlib("some")
 def some_(director, *gens):
     genlist = list(gens)
     random.shuffle(genlist)
-    n = random.randrange(2,5)
-    return ' '.join(g() for g in genlist[:n])
+    n = random.randrange(2, 5)
+    return " ".join(g() for g in genlist[:n])
+
 
 @stdlib("fix")
 def fix(director, gen):
@@ -392,30 +430,33 @@ def fix(director, gen):
         df[gen] = gen()
     return df[gen]
 
+
 @stdlib("once")
 def once(director, gen=None):
     if director["once"] is None:
         director["once"] = set()
     assert director.current not in director["once"]
     director["once"].add(director.current)
-    if gen: 
-         return gen()
+    if gen:
+        return gen()
     return ""
+
 
 @stdlib("choose", float)
 def choose(director, value, *gens):
     n = len(gens) - 1
-    p = 1 / (1 + math.exp(-value/2))
+    p = 1 / (1 + math.exp(-value / 2))
     k = 0
-    for _ in xrange(n):
+    for _ in range(n):
         k += random.random() < p
     return gens[k]()
 
+
 @stdlib("repeat", int)
 def repeat(director, n, gen):
-    return ' '.join(gen() for _ in xrange(n))
+    return " ".join(gen() for _ in range(n))
+
 
 @stdlib("lorem")
 def lorem(director):
     return loremipsum.get_sentence()
-
