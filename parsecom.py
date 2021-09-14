@@ -62,7 +62,7 @@ class ThenWS(Then):
         return first + second, rest
 
     def __repr__(self):
-        return "%r + %r" % (self.p1, self.p2)
+        return f"{self.p1!r} + {self.p2!r}"
 
 
 class Many(Parser):
@@ -106,7 +106,7 @@ class Apply(Parser):
         return [self.func(*matches)], rest
 
     def __repr__(self):
-        return "%r >> %r" % (self.parser, self.func)
+        return f"{self.parser!r} >> {self.func!r}"
 
 
 class Regex(Parser):
