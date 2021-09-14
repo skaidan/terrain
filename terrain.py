@@ -3,6 +3,7 @@ import language
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 import scipy.spatial as spl
 import scipy.sparse as spa
 import scipy.sparse.csgraph as csg
@@ -548,11 +549,13 @@ class MapGrid:
             newcity = np.argmax(self.city_score)
 
             # Only place cities between 0.1 and 0.9 axes.
+            city_max_ax = 0.85
+            city_min_ax = 0.15
             # Chance that this location has no city, scales with number of cities placed so far
             if (
                 np.random.random() < (len(self.cities) + 1) ** -0.2
-                and 0.1 < self.vxs[newcity, 0] < 0.9
-                and 0.1 < self.vxs[newcity, 1] < 0.9
+                and city_min_ax < self.vxs[newcity, 0] < city_max_ax
+                and city_min_ax < self.vxs[newcity, 1] < city_max_ax
             ):
                 self.cities.append(newcity)
 
@@ -705,10 +708,67 @@ class MapGrid:
         clist = min(itertools.permutations(cities), key=totallength)
         return clist
 
+    RIVER_COLOR = mpl.cm.Blues(0.35)
+
     def plot(self, filename, rivers=True, cmap=mpl.cm.Greys, **kwargs):
         print("Plotting")
         fig = plt.figure(figsize=(6, 6))
         ax = fig.add_axes([0, 0, 1, 1])
+
+        # Border patch
+        bw = border_width = 0.1
+
+        # Solid border
+        vertices = [
+            (0, 0),
+            (0, 1),
+            (1, 1),
+            (1, 0),
+            (0, 0),
+            (bw, bw),
+            (1 - bw, bw),
+            (1 - bw, 1 - bw),
+            (bw, 1 - bw),
+            (bw, bw),
+        ]
+        codes = [
+            mpl.path.Path.MOVETO,
+            mpl.path.Path.LINETO,
+            mpl.path.Path.LINETO,
+            mpl.path.Path.LINETO,
+            mpl.path.Path.LINETO,
+            mpl.path.Path.MOVETO,
+            mpl.path.Path.LINETO,
+            mpl.path.Path.LINETO,
+            mpl.path.Path.LINETO,
+            mpl.path.Path.LINETO,
+        ]
+
+        # Diagonally split border
+        # vertices = [
+        #     (0, 0),
+        #     (0, 1),
+        #     (1, 1),
+        #     (1, 0),
+        #     (0, 0),
+        #     (bw, bw),
+        #     (1 - bw, bw),
+        #     (1, 0),
+        #     (1 - bw, bw),
+        #     (1 - bw, 1 - bw),
+        #     (1, 1),
+        #     (1 - bw, 1 - bw),
+        #     (bw, 1 - bw),
+        #     (0, 1),
+        #     (bw, 1 - bw),
+        #     (bw, bw),
+        #     (0, 0),
+        # ]
+        # codes = None
+
+        path = mpl.path.Path(vertices, codes)
+        patch = mpl.patches.PathPatch(path, fc="lightslategrey", ec="black", zorder=15)
+        ax.add_patch(patch)
 
         elev = np.where(self.elevation > 0, 0.1, 0)
         good = ~self.extend_area(self.edge, 10)
@@ -716,6 +776,7 @@ class MapGrid:
         goodidxs = [i for i in range(self.nvxs) if good[i]]
         tris = [self.tris[i] for i in goodidxs]
         elevs = elev[goodidxs]
+        elevations = self.elevation[goodidxs]
 
         # Plot slope lines
         slopelines = []
@@ -746,22 +807,36 @@ class MapGrid:
         slopecol.set_linewidth(0.3)
         ax.add_collection(slopecol)
 
-        #         land = np.where(elevs > 0)[0]
-        #         landpatches = [mpl.patches.Polygon(self.pts[tris[i],:], closed=True) for i in land]
-        #         landpatchcol = mpl.collections.PatchCollection(landpatches)
-        #         landpatchcol.set_color(colors[land,:])
-        #         landpatchcol.set_zorder(0)
-        #         ax.gca().add_collection(landpatchcol)
+        # Plot land patches
+        land = np.where(elevs > 0)[0]
+        print(elevations[land][:30])
+        landpatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land]
+        landpatchcol = mpl.collections.PatchCollection(landpatches, cmap="copper", ec="face")
+
+        land_heights = elevations[land]
+        land_heights = land_heights - min(land_heights)
+        land_heights *= 1 / max(land_heights)
+        land_colors = land_heights * 0.30 + 0.35 + np.random.random(len(land_heights)) * 0.02 - 0.10
+        landpatchcol.set_array(land_colors)
+        landpatchcol.set_clim([0.0, 1.0])
+        landpatchcol.set_zorder(0)
+        ax.add_collection(landpatchcol)
 
         # Plot sea patches
         sea = np.where(elevs <= 0)[0]
-        seapatches = [
-            mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in sea
-        ]
-        seapatchcol = mpl.collections.PatchCollection(seapatches)
-        seapatchcol.set_color("white")
-        seapatchcol.set_zorder(10)
-        ax.add_collection(seapatchcol)
+        if len(sea) > 0:
+            seapatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in sea]
+            seapatchcol = mpl.collections.PatchCollection(seapatches, cmap="Blues", ec="face")
+
+            # Random range of narrow range of cmap
+            sea_heights = elevations[sea]
+            sea_heights = abs(sea_heights) - min(sea_heights)
+            sea_heights *= 1 / max(sea_heights)
+            sea_colors = sea_heights * 0.80 + 0.10 + np.random.random(len(sea_heights)) * 0.02
+            seapatchcol.set_array(sea_colors)
+            seapatchcol.set_clim([0.0, 1.0])
+            seapatchcol.set_zorder(10)
+            ax.add_collection(seapatchcol)
 
         # Draw rivers
         if rivers:
@@ -771,16 +846,16 @@ class MapGrid:
                 & (self.downhill != -1)
                 & (self.flow > np.percentile(self.flow, 100 - self.riverperc))
             )
-            rivers = relaxpts(
-                self.vxs, [(u, self.downhill[u]) for u in range(self.nvxs) if land[u]]
-            )
+            rivers = relaxpts(self.vxs, [(u, self.downhill[u]) for u in range(self.nvxs) if land[u]])
             print(len(rivers), sum(land))
             rivers = mergelines(rivers)
-            rivercol = mpl.collections.PathCollection(rivers)
-            rivercol.set_edgecolor("black")
+            rivercol = mpl.collections.PathCollection(rivers, capstyle="round", joinstyle="round")
+            # rivercol.set_edgecolor("black")
+            rivercol.set_edgecolor(self.RIVER_COLOR)
             rivercol.set_linewidth(1)
             rivercol.set_facecolor("none")
-            rivercol.set_zorder(9)
+            # rivercol.set_zorder(9)
+            rivercol.set_zorder(13)
             ax.add_collection(rivercol)
 
         # Draw cities
@@ -790,10 +865,10 @@ class MapGrid:
             self.vxs[bigcities, 0],
             self.vxs[bigcities, 1],
             c="white",
-            s=100,
+            s=70,
             zorder=15,
             edgecolor="black",
-            linewidth=2,
+            linewidth=1.5,
         )
         ax.scatter(
             self.vxs[smallcities, 0],
@@ -807,17 +882,30 @@ class MapGrid:
         # Draw city labels
         labelbox = dict(boxstyle="round,pad=0.1", fc="white", ec="none")
         for city in self.cities:
-            ax.annotate(
+            if city in bigcities:
+                size = "small"
+                ytext = 12
+                stroke_lw = 2
+                zorder = 20.5
+            else:
+                size = "x-small"
+                ytext = 8
+                stroke_lw = 2
+                zorder = 20
+
+            txt = ax.annotate(
                 xy=self.vxs[city, :],
                 text=self.city_names[city],
-                xytext=(0, 12 if city in bigcities else 8),
+                xytext=(0, ytext),
                 ha="center",
                 va="center",
                 textcoords="offset points",
-                bbox=labelbox,
-                size="small" if city in bigcities else "x-small",
-                zorder=20.5 if city in bigcities else 20,
+                # bbox=labelbox,
+                size=size,
+                zorder=zorder,
             )
+            # Add stroke to text label
+            txt.set_path_effects([pe.Stroke(linewidth=stroke_lw, foreground="lightsteelblue"), pe.Normal()])
 
         reglabels = []
         for terr in sorted(
@@ -856,18 +944,20 @@ class MapGrid:
             xy = self.vxs[np.argmax(scores), :]
             # ax.axvspan(xy[0] - w, xy[0] + w, xy[1] - 0.07, xy[1] + 0.03,
             # facecolor='none', edgecolor='red', zorder=19)
-            print("Labelling %s at %.1f" % (name, scores.max()))
+            print(f"Labelling {name} at {scores.max():.1f}")
             reglabels.append(xy)
             label = (r"\sc " + name) if tex else name
-            ax.annotate(
+
+            txt = ax.annotate(
                 xy=xy,
                 text=label,
                 ha="center",
                 va="center",
-                bbox=labelbox,
+                # bbox=labelbox,
                 size="large",
                 zorder=21,
             )
+            txt.set_path_effects([pe.Stroke(linewidth=3, foreground="slategrey"), pe.Normal()])
 
         borders = []
         borderadj = defaultdict(list)
@@ -948,7 +1038,7 @@ class MapGrid:
 
 
 if __name__ == "__main__":
-    for i in range(100):
+    for i in range(1):
         plt.close("all")
         while True:
             try:
