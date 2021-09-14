@@ -24,8 +24,6 @@ else:
 
 plt.rcParams["font.size"] = 10
 
-# In[60]:
-
 
 def distance(a, b):
     disp2 = (a - b) ** 2
@@ -137,17 +135,25 @@ class MapException(Exception):
     pass
 
 
-class MapGrid(object):
+class MapGrid:
     def __init__(self, mode="shore", n=16384):
+        """
+        Creates a new MapGrid object
+        :param mode: the map making mode
+        :param n: number of map grid points
+        """
         self.mode = mode
         self.lang = language.get_language()
         self.build_grid(n)
+
         if "/" in mode:
             self.mixed_heightmap()
             mode = mode.split("/")[0]
         else:
             self.single_heightmap(mode)
+
         self.finalize()
+
         self.riverperc = riverpercs[mode] * np.mean(self.elevation > 0)
         self.place_cities(np.random.randint(*city_counts[mode]))
         self.grow_territory(np.random.randint(*terr_counts[mode]))
@@ -160,10 +166,21 @@ class MapGrid(object):
         return [c for c in self.cities if self.territories[c] == c]
 
     def save(self, filename):
+        """
+        Save MapGrid data to file.
+        :param filename: the filename to save to
+        """
         with gzip.open(filename, "w") as f:
             f.write(pickle.dumps(self))
 
     def build_grid(self, n):
+        """
+        Build the map grid. Spreads points and runs a few iterations of improvement to make a nice initial grid.
+        :param n: number of points in the grid
+        """
+
+        # TODO: other shapes of point spread - e.g. Rectangle, Circle, Oval etc.
+
         self.pts = np.random.random((n, 2))
         self.improve_pts()
         self.vor = spl.Voronoi(self.pts)
@@ -178,6 +195,12 @@ class MapGrid(object):
         self.erodability = np.ones(self.nvxs)
 
     def do_erosion(self, n, rate=0.01):
+        """
+        Perform erosion by water flow.
+        :param n: number of iterations to perform
+        :param rate: the erosion rate
+        """
+
         for _ in range(n):
             self.calc_downhill()
             self.calc_flow()
@@ -187,6 +210,10 @@ class MapGrid(object):
             self.elevation[-1] = 0
 
     def raise_sealevel(self, perc=35):
+        """
+        Raise the sea level to a certain percentile of the heightmap, rescales heights after shift.
+        :param perc: the elevation percentile to place sea level at
+        """
         maxheight = self.elevation.max()
         self.elevation -= np.percentile(self.elevation, perc)
         self.elevation *= maxheight / self.elevation.max()
@@ -256,7 +283,7 @@ class MapGrid(object):
 
     def calc_edges(self):
         n = self.nvxs
-        self.edge = np.zeros(n, np.bool)
+        self.edge = np.zeros(n, bool)
         for u in range(n):
             adjs = self.adj_vxs[u]
             if -1 in adjs:  # or \
@@ -269,14 +296,12 @@ class MapGrid(object):
     def perlin(self, base=None):
         if base is None:
             base = np.random.randint(1000)
-        return np.array(
-            [
-                noise.pnoise2(x, y, lacunarity=1.7, octaves=3, base=base)
-                for x, y in self.vxs
-            ]
-        )
+
+        perlin_noise = np.array([noise.pnoise2(x, y, lacunarity=1.7, octaves=3, base=base) for x, y in self.vxs])
+        return perlin_noise
 
     def distort_vxs(self):
+        """Distort the vertices with Perlin noise."""
         self.dvxs = self.vxs.copy()
         self.dvxs[:, 0] += self.perlin()
         self.dvxs[:, 1] += self.perlin()
@@ -302,21 +327,14 @@ class MapGrid(object):
         print("Calculating elevations")
         n = self.nvxs
         self.elevation = np.zeros(n + 1)
-        self.elevation[:-1] = 0.5 + (
-            (self.dvxs - 0.5) * np.random.normal(0, 4, (1, 2))
-        ).sum(1)
+        self.elevation[:-1] = 0.5 + ((self.dvxs - 0.5) * np.random.normal(0, 4, (1, 2))).sum(1)
         self.elevation[:-1] += -4 * (np.random.random() - 0.5) * distance(self.vxs, 0.5)
         mountains = np.random.random((50, 2))
         for m in mountains:
-            self.elevation[:-1] += (
-                np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05 ** 2)) ** 2
-            )
+            self.elevation[:-1] += np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05 ** 2)) ** 2
         print("Edge height:", self.elevation[:-1][self.edge].max())
 
-        along = (
-            ((self.dvxs - 0.5) * np.random.normal(0, 2, (1, 2))).sum(1)
-            + np.random.normal(0, 0.5)
-        ) * 10
+        along = (((self.dvxs - 0.5) * np.random.normal(0, 2, (1, 2))).sum(1) + np.random.normal(0, 0.5)) * 10
         self.erodability = np.exp(4 * np.arctan(along))
 
         for i in range(5):
@@ -369,9 +387,7 @@ class MapGrid(object):
         self.elevation[:-1] = 50 - 10 * np.abs(x)
         mountains = np.random.random((50, 2))
         for m in mountains:
-            self.elevation[:-1] += (
-                np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05 ** 2)) ** 2
-            )
+            self.elevation[:-1] += np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05 ** 2)) ** 2
         self.erodability[:] = np.exp(50 - 10 * self.elevation[:-1])
         for _ in range(5):
             self.rift()
@@ -431,12 +447,11 @@ class MapGrid(object):
 
     def calc_slopes(self):
         dist = distance(self.vxs, self.vxs[self.downhill, :])
-        self.slope = (self.elevation[:-1] - self.elevation[self.downhill]) / (
-            dist + 1e-9
-        )
+        self.slope = (self.elevation[:-1] - self.elevation[self.downhill]) / (dist + 1e-9)
         self.slope[self.downhill == -1] = 0
 
     def erode(self, max_step=0.05):
+        """Perform erosion on the height map."""
         riverrate = -self.flow ** 0.5 * self.slope  # river erosion
         sloperate = -self.slope ** 2 * self.erodability  # slope smoothing
         rate = 1000 * riverrate + sloperate
@@ -460,9 +475,7 @@ class MapGrid(object):
 
     def find_lowest_sill(self, sinks):
         h = 10000
-        edges = np.where(
-            (sinks != -1) & np.any((sinks[self.adj_mat] == -1) & self.adj_mat != -1, 1)
-        )[0]
+        edges = np.where((sinks != -1) & np.any((sinks[self.adj_mat] == -1) & self.adj_mat != -1, 1))[0]
 
         for u in edges:
             adjs = [v for v in self.adj_vxs[u] if v != -1]
@@ -522,20 +535,29 @@ class MapGrid(object):
                 self.elevation[:-1] = new_elev
 
     def place_cities(self, n=20):
+        """
+        Algorithm for placing cities, places cities close to large flows of water that are at or above sea level.
+
+        :params n: Number of cities to place
+        """
         self.city_score = self.flow ** 0.5
         self.city_score[self.elevation[:-1] <= 0] = -9999999
         self.cities = []
         while len(self.cities) < n:
+            # location of potential new city is place with maximum score
             newcity = np.argmax(self.city_score)
+
+            # Only place cities between 0.1 and 0.9 axes.
+            # Chance that this location has no city, scales with number of cities placed so far
             if (
                 np.random.random() < (len(self.cities) + 1) ** -0.2
                 and 0.1 < self.vxs[newcity, 0] < 0.9
                 and 0.1 < self.vxs[newcity, 1] < 0.9
             ):
                 self.cities.append(newcity)
-            self.city_score -= (
-                0.01 * 1 / (distance(self.vxs, self.vxs[newcity, :]) + 1e-9)
-            )
+
+            # penalize city score for the newcity location.
+            self.city_score -= 0.01 * 1 / (distance(self.vxs, self.vxs[newcity, :]) + 1e-9)
 
     def edge_weight(self, u, v, territory=False):
         horiz = distance(self.vxs[u, :], self.vxs[v, :])
@@ -583,9 +605,7 @@ class MapGrid(object):
                     p.insert(0, preds[i, p[0]])
                 p = [x for x in p if x < n]
                 d = dists[i, b]
-                self.path_cache[
-                    "topleft" if a == n else a, "bottomright" if b == n + 1 else b
-                ] = (p, d)
+                self.path_cache["topleft" if a == n else a, "bottomright" if b == n + 1 else b] = (p, d)
 
     def shortest_path(
         self,
@@ -697,31 +717,26 @@ class MapGrid(object):
         tris = [self.tris[i] for i in goodidxs]
         elevs = elev[goodidxs]
 
+        # Plot slope lines
         slopelines = []
         r = 0.25 * self.nvxs ** -0.5
         for i in goodidxs:
             if self.elevation[i] <= 0:
                 continue
+
             t = self.tris[i]
             s, s2 = trislope(self.pts[t, :], self.elevation_pts[t])
             s /= 10
             if abs(s) < 0.1 + 0.3 * np.random.random():
                 continue
             x, y = self.vxs[i, :]
-            l = (
-                r
-                * (1 + np.random.random())
-                * (1 - 0.2 * np.arctan(s) ** 2)
-                * np.exp(s2 / 100)
-            )
+            l = r * (1 + np.random.random()) * (1 - 0.2 * np.arctan(s) ** 2) * np.exp(s2 / 100)
             if abs(l * s) > 2 * r:
                 n = int(abs(l * s / r))
                 l /= n
                 uv = np.random.normal(0, r / 2, (min(n, 4), 2))
                 for u, v in uv:
-                    slopelines.append(
-                        [(x + u - l, y + v - l * s), (x + u + l, y + v + l * s)]
-                    )
+                    slopelines.append([(x + u - l, y + v - l * s), (x + u + l, y + v + l * s)])
             else:
                 slopelines.append([(x - l, y - l * s), (x + l, y + l * s)])
 
@@ -738,6 +753,7 @@ class MapGrid(object):
         #         landpatchcol.set_zorder(0)
         #         ax.gca().add_collection(landpatchcol)
 
+        # Plot sea patches
         sea = np.where(elevs <= 0)[0]
         seapatches = [
             mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in sea
@@ -747,6 +763,7 @@ class MapGrid(object):
         seapatchcol.set_zorder(10)
         ax.add_collection(seapatchcol)
 
+        # Draw rivers
         if rivers:
             land = (
                 good
@@ -766,6 +783,7 @@ class MapGrid(object):
             rivercol.set_zorder(9)
             ax.add_collection(rivercol)
 
+        # Draw cities
         bigcities = self.big_cities
         smallcities = [c for c in self.cities if c not in bigcities]
         ax.scatter(
@@ -786,6 +804,7 @@ class MapGrid(object):
             edgecolor="none",
         )
 
+        # Draw city labels
         labelbox = dict(boxstyle="round,pad=0.1", fc="white", ec="none")
         for city in self.cities:
             ax.annotate(
@@ -799,6 +818,7 @@ class MapGrid(object):
                 size="small" if city in bigcities else "x-small",
                 zorder=20.5 if city in bigcities else 20,
             )
+
         reglabels = []
         for terr in sorted(
             np.unique(self.territories),
@@ -815,10 +835,12 @@ class MapGrid(object):
             scores = -5000 * distance(self.vxs, landcenter)
             scores -= 1000 * distance(self.vxs, center)
             scores[~region] -= 3000
+
             for city in self.cities:
                 dists = self.vxs - self.vxs[city, :] - np.array([[0, 0.02]])
                 exclude = (np.abs(dists[:, 0]) < w) & (np.abs(dists[:, 1]) < 0.05)
                 scores[exclude] -= 4000 if city in bigcities else 500
+
             for rl in reglabels:
                 dists = self.vxs - rl
                 exclude = (np.abs(dists[:, 0]) < 0.15 + w) & (np.abs(dists[:, 1]) < 0.1)
@@ -830,6 +852,7 @@ class MapGrid(object):
             scores[self.vxs[:, 1] > 0.97] -= 50000
             scores[self.vxs[:, 1] < 0.03] -= 50000
             assert scores.max() > -50000
+
             xy = self.vxs[np.argmax(scores), :]
             # ax.axvspan(xy[0] - w, xy[0] + w, xy[1] - 0.07, xy[1] + 0.03,
             # facecolor='none', edgecolor='red', zorder=19)
@@ -856,11 +879,7 @@ class MapGrid(object):
             p1, p2 = rp
             if not (good[v1] and good[v2]):
                 continue
-            if (
-                self.territories[v1] != self.territories[v2]
-                and self.elevation[v1] > 0
-                and self.elevation[v2] > 0
-            ):
+            if self.territories[v1] != self.territories[v2] and self.elevation[v1] > 0 and self.elevation[v2] > 0:
                 borders.append((p1, p2))
             if (self.elevation[v1] > 0 and self.elevation[v2] <= 0) or (
                 self.elevation[v2] > 0 and self.elevation[v1] <= 0
@@ -911,6 +930,7 @@ class MapGrid(object):
         plt.close()
 
     def name_places(self):
+        """Generate place names using lang module."""
         self.city_names = {}
         self.region_names = {}
         for city in self.cities:
@@ -933,8 +953,8 @@ if __name__ == "__main__":
         while True:
             try:
                 m = MapGrid()
-                filename = "tests/%s-%02d.png" % (m.mode, i)
-                m.plot(filename)
+                filename = f"tests/{m.mode}-{i:02d}.png"
+                m.plot(filename, dpi=200)
                 break
             except AssertionError:
                 print("Failed assertion, retrying")
