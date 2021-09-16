@@ -60,7 +60,9 @@ def relaxpts(pts, idxs, n=1):
 def mergelines(segs):
     n = len(segs)
     segs = set((tuple(a), tuple(b)) for (a, b) in segs)
+
     assert len(segs) == n
+
     adjs = defaultdict(list)
     for a, b in segs:
         adjs[a].append((a, b))
@@ -74,32 +76,40 @@ def mergelines(segs):
             line = list(segs.pop())
             nremoved += 1
         found = None
+
         for seg in adjs[line[-1]]:
             if seg not in segs:
                 continue
+
             if seg[0] == line[-1]:
                 line.append(seg[1])
                 found = seg
                 break
+
             elif seg[1] == line[-1]:
                 line.append(seg[0])
                 found = seg
                 break
+
         if found:
             segs.remove(found)
             nremoved += 1
             continue
+
         for seg in adjs[line[0]]:
             if seg not in segs:
                 continue
+
             if seg[0] == line[0]:
                 line.insert(0, seg[1])
                 found = seg
                 break
+
             elif seg[1] == line[0]:
                 line.insert(0, seg[0])
                 found = seg
                 break
+
         if found:
             segs.remove(found)
             nremoved += 1
@@ -109,10 +119,13 @@ def mergelines(segs):
         lines.append(mpl.path.Path(line))
         length += len(line) - 1
         line = None
-    assert nremoved == n, "Got %d, Removed %d" % (n, nremoved)
+
+    assert nremoved == n, f"Got {n}, Removed {nremoved}"
+
     if line is not None:
         length += len(line) - 1
         lines.append(mpl.path.Path(line))
+
     print(length)
     return lines
 
@@ -137,7 +150,7 @@ class MapException(Exception):
 
 
 class MapGrid:
-    def __init__(self, mode="shore", n=16384):
+    def __init__(self, mode="shore", n=2 ** 14):
         """
         Creates a new MapGrid object
         :param mode: the map making mode
@@ -780,16 +793,23 @@ class MapGrid:
 
         # Plot slope lines
         slopelines = []
+        slopes = []
         r = 0.25 * self.nvxs ** -0.5
         for i in goodidxs:
+            # Do not put slope lines in ocean
             if self.elevation[i] <= 0:
                 continue
 
             t = self.tris[i]
             s, s2 = trislope(self.pts[t, :], self.elevation_pts[t])
             s /= 10
+
+            slopes.append(s)
+
+            # Do not add a line if slope is below threshold
             if abs(s) < 0.1 + 0.3 * np.random.random():
                 continue
+
             x, y = self.vxs[i, :]
             l = r * (1 + np.random.random()) * (1 - 0.2 * np.arctan(s) ** 2) * np.exp(s2 / 100)
             if abs(l * s) > 2 * r:
@@ -805,19 +825,40 @@ class MapGrid:
         slopecol.set_zorder(1)
         slopecol.set_color("black")
         slopecol.set_linewidth(0.3)
-        ax.add_collection(slopecol)
+        # ax.add_collection(slopecol)
+
+        # Adjust slope values to fit cmap
+        land_slopes = np.array(slopes)
+        land_angles = np.sin(np.arctan(slopes))
+
+        print(f"Slopes")
+        print(f"Max: {max(land_angles)}")
+        print(f"Min: {min(land_angles)}")
+        print(f"Avg: {np.mean(land_angles)}")
+
+        # Tone down gradient difference
+        land_slopes *= 0.5
+        land_angles *= 0.7
+
+        # Slopes should be centered at 0.5 (flat ground = 0.5)
+        land_slopes += 0.5
+        land_angles += 0.5
+
+        cmap = "copper"
+        # cmap = "summer"
 
         # Plot land patches
         land = np.where(elevs > 0)[0]
-        print(elevations[land][:30])
         landpatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land]
-        landpatchcol = mpl.collections.PatchCollection(landpatches, cmap="copper", ec="face")
+        landpatchcol = mpl.collections.PatchCollection(landpatches, cmap=cmap, ec="face")
 
         land_heights = elevations[land]
         land_heights = land_heights - min(land_heights)
         land_heights *= 1 / max(land_heights)
         land_colors = land_heights * 0.30 + 0.35 + np.random.random(len(land_heights)) * 0.02 - 0.10
-        landpatchcol.set_array(land_colors)
+        # landpatchcol.set_array(land_colors)
+        landpatchcol.set_array(land_angles)
+        # landpatchcol.set_array(land_slopes)
         landpatchcol.set_clim([0.0, 1.0])
         landpatchcol.set_zorder(0)
         ax.add_collection(landpatchcol)
@@ -855,13 +896,14 @@ class MapGrid:
             rivercol.set_linewidth(1)
             rivercol.set_facecolor("none")
             # rivercol.set_zorder(9)
-            rivercol.set_zorder(13)
+            rivercol.set_zorder(12)
+            rivercol.set_path_effects([pe.SimpleLineShadow((-0.5, 0.0)), pe.Normal()])
             ax.add_collection(rivercol)
 
         # Draw cities
         bigcities = self.big_cities
         smallcities = [c for c in self.cities if c not in bigcities]
-        ax.scatter(
+        c = ax.scatter(
             self.vxs[bigcities, 0],
             self.vxs[bigcities, 1],
             c="white",
@@ -870,6 +912,7 @@ class MapGrid:
             edgecolor="black",
             linewidth=1.5,
         )
+        c.set_path_effects([pe.SimpleLineShadow((1, 0)), pe.Normal()])
         ax.scatter(
             self.vxs[smallcities, 0],
             self.vxs[smallcities, 1],
@@ -907,6 +950,7 @@ class MapGrid:
             # Add stroke to text label
             txt.set_path_effects([pe.Stroke(linewidth=stroke_lw, foreground="lightsteelblue"), pe.Normal()])
 
+        # Draw region labels
         reglabels = []
         for terr in sorted(
             np.unique(self.territories),
@@ -959,8 +1003,9 @@ class MapGrid:
             )
             txt.set_path_effects([pe.Stroke(linewidth=3, foreground="slategrey"), pe.Normal()])
 
+        # Make borders and coasts
         borders = []
-        borderadj = defaultdict(list)
+        # borderadj = defaultdict(list)
         coasts = []
         for rv, rp in zip(self.vor.ridge_vertices, self.vor.ridge_points):
             if -1 in rv or -1 in rp:
@@ -976,37 +1021,39 @@ class MapGrid:
             ):
                 coasts.append(self.pts[rp, :])
 
+        # Draw borders
         borders = mergelines(relaxpts(self.pts, borders))
         print("Borders:", len(borders))
         bordercol = mpl.collections.PathCollection(borders)
         bordercol.set_facecolor("none")
         bordercol.set_edgecolor("black")
-        bordercol.set_linestyle(":")
-        bordercol.set_linewidth(3)
-        bordercol.set_zorder(11)
+        bordercol.set_linestyle("--")
+        bordercol.set_linewidth(1.0)
+        bordercol.set_zorder(13)
         ax.add_collection(bordercol)
 
+        # Draw coasts
         coastcol = mpl.collections.PathCollection(mergelines(coasts))
         coastcol.set_facecolor("none")
         coastcol.set_edgecolor("black")
-        coastcol.set_zorder(12)
-        coastcol.set_linewidth(1.5)
+        coastcol.set_zorder(11)
+        coastcol.set_linewidth(1.0)
         ax.add_collection(coastcol)
 
-        clist = self.ordered_cities()
-        clist = ["topleft"] + list(clist) + ["bottomright"]
-        for c1, c2 in zip(clist[:-1], clist[1:]):
-            path, _ = self.shortest_path(c1, c2)
-            path = mergelines(relaxpts(self.vxs, zip(path[:-1], path[1:])))
-            pathcol = mpl.collections.PathCollection(path)
-            pathcol.set_facecolor("none")
-            pathcol.set_edgecolor("black")
-            pathcol.set_linestyle("--")
-            pathcol.set_linewidth(2.5)
-            pathcol.set_zorder(14)
-            ax.add_collection(pathcol)
-            # plt.plot(self.vxs[path, 0], self.vxs[path, 1], c='red',
-            # zorder=10000, linewidth=2, alpha=0.5)
+        # clist = self.ordered_cities()
+        # clist = ["topleft"] + list(clist) + ["bottomright"]
+        # for c1, c2 in zip(clist[:-1], clist[1:]):
+        #     print(f"Path between {c1} and {c2}")
+        #     path, _ = self.shortest_path(c1, c2)
+        #     path = mergelines(relaxpts(self.vxs, zip(path[:-1], path[1:])))
+        #     pathcol = mpl.collections.PathCollection(path)
+        #     pathcol.set_facecolor("none")
+        #     pathcol.set_edgecolor("red")
+        #     pathcol.set_linestyle("--")
+        #     pathcol.set_linewidth(2.5)
+        #     pathcol.set_zorder(14)
+        #     ax.add_collection(pathcol)
+        #     # ax.plot(self.vxs[path, 0], self.vxs[path, 1], c="red", zorder=10000, linewidth=2, alpha=0.5)
 
         ax.axis("image")
         ax.set_xlim(0.0, 1.0)
