@@ -1,0 +1,150 @@
+{
+    "vsets": [
+        "AIU",
+        "AEIOU",
+        "AEIOUaei",
+        "AEIOUu",
+        "AIUai",
+        "EOU",
+        "AEIOU@0u"
+    ],
+    "csets": [
+        "PTKMNSL",
+        "PTKBDGMNLRSsZzc",
+        "PTKMNH",
+        "HKLMNPW'",
+        "PTKQVSGRMNnLJ",
+        "TKSsDBQgxMNLRWY",
+        "TKDGMNSs",
+        "PTKBDGMNzSZcHJW"
+    ],
+    "lsets": [
+        "RL",
+        "R",
+        "L",
+        "WY",
+        "RLWY"
+    ],
+    "ssets": [
+        "S",
+        "Ss",
+        "SsF"
+    ],
+    "fsets": [
+        "MN",
+        "SK",
+        "MNn",
+        "SsZz"
+    ],
+    "syllsets": [
+        "CVV?C",
+        "CVC",
+        "CVVC?",
+        "CVC?",
+        "CV",
+        "VC",
+        "CVF",
+        "C?VC",
+        "CVF?",
+        "CL?VC",
+        "CL?VF",
+        "S?CVC",
+        "S?CVF",
+        "S?CVC?",
+        "C?VF",
+        "C?VC?",
+        "C?VF?",
+        "C?L?VC",
+        "VC",
+        "CVL?C?",
+        "C?VL?C",
+        "C?VLC?"
+    ],
+    "vorthos": [
+        {
+            "a": "á",
+            "e": "é",
+            "i": "í",
+            "u": "ü",
+            "@": "ä",
+            "0": "ö"
+        },
+        {
+            "a": "au",
+            "e": "ei",
+            "i": "ie",
+            "u": "oo",
+            "@": "ea",
+            "0": "ou"
+        },
+        {
+            "a": "â",
+            "e": "ê",
+            "i": "y",
+            "u": "w",
+            "@": "à",
+            "0": "ô"
+        },
+        {
+            "a": "aa",
+            "e": "ee",
+            "i": "ii",
+            "u": "uu",
+            "@": "ai",
+            "0": "oo"
+        }
+    ],
+    "corthos": [
+        {
+            "n": "ng",
+            "x": "kh",
+            "s": "sh",
+            "g": "gh",
+            "z": "zh",
+            "c": "ch"
+        },
+        {
+            "n": "ñ",
+            "x": "x",
+            "s": "š",
+            "g": "gh",
+            "z": "ž",
+            "c": "č"
+        },
+        {
+            "n": "ng",
+            "x": "ch",
+            "s": "sch",
+            "g": "gh",
+            "z": "ts",
+            "c": "tsch"
+        },
+        {
+            "n": "ng",
+            "x": "c",
+            "s": "ch",
+            "g": "gh",
+            "z": "j",
+            "c": "tch"
+        },
+        {
+            "n": "ng",
+            "x": "c",
+            "s": "x",
+            "g": "g",
+            "z": "zh",
+            "c": "q"
+        }
+    ],
+    "restricts": [
+        "Ss",
+        "sS",
+        "LR",
+        "RL",
+        "FS",
+        "Fs",
+        "SS",
+        "ss",
+        "(.)\\1"
+    ]
+}

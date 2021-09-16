@@ -1,4 +1,5 @@
 import random
+import json
 import re
 from collections import defaultdict
 
@@ -114,73 +115,77 @@ class Language(object):
                     return p
 
 
-vsets = ["AIU", "AEIOU", "AEIOUaei", "AEIOUu", "AIUai", "EOU", "AEIOU@0u"]
-csets = [
-    "PTKMNSL",
-    "PTKBDGMNLRSsZzc",
-    "PTKMNH",
-    "HKLMNPW'",
-    "PTKQVSGRMNnLJ",
-    "TKSsDBQgxMNLRWY",
-    "TKDGMNSs",
-    "PTKBDGMNzSZcHJW",
-]
-lsets = ["RL", "R", "L", "WY", "RLWY"]
-ssets = ["S", "Ss", "SsF"]
-fsets = ["MN", "SK", "MNn", "SsZz"]
-syllsets = [
-    "CVV?C",
-    "CVC",
-    "CVVC?",
-    "CVC?",
-    "CV",
-    "VC",
-    "CVF",
-    "C?VC",
-    "CVF?",
-    "CL?VC",
-    "CL?VF",
-    "S?CVC",
-    "S?CVF",
-    "S?CVC?",
-    "C?VF",
-    "C?VC?",
-    "C?VF?",
-    "C?L?VC",
-    "VC",
-    "CVL?C?",
-    "C?VL?C",
-    "C?VLC?",
-]
-vorthos = [
-    {"a": u"á", "e": u"é", "i": u"í", "u": u"ü", "@": u"ä", "0": u"ö"},
-    {"a": u"au", "e": u"ei", "i": u"ie", "u": u"oo", "@": u"ea", "0": u"ou"},
-    {"a": u"â", "e": u"ê", "i": u"y", "u": u"w", "@": u"à", "0": u"ô"},
-    {"a": u"aa", "e": u"ee", "i": u"ii", "u": u"uu", "@": u"ai", "0": u"oo"},
-]
-corthos = [
-    {"n": "ng", "x": "kh", "s": "sh", "g": "gh", "z": "zh", "c": "ch"},
-    {"n": u"ñ", "x": "x", "s": u"š", "g": u"gh", "z": u"ž", "c": u"č"},
-    {"n": u"ng", "x": "ch", "s": u"sch", "g": u"gh", "z": u"ts", "c": u"tsch"},
-    {"n": u"ng", "x": "c", "s": u"ch", "g": u"gh", "z": u"j", "c": u"tch"},
-    {"n": u"ng", "x": "c", "s": u"x", "g": u"g", "z": u"zh", "c": u"q"},
-]
-restricts = ["Ss", "sS", "LR", "RL", "FS", "Fs", "SS", "ss", r"(.)\1"]
+# vsets = ["AIU", "AEIOU", "AEIOUaei", "AEIOUu", "AIUai", "EOU", "AEIOU@0u"]
+# csets = [
+#     "PTKMNSL",
+#     "PTKBDGMNLRSsZzc",
+#     "PTKMNH",
+#     "HKLMNPW'",
+#     "PTKQVSGRMNnLJ",
+#     "TKSsDBQgxMNLRWY",
+#     "TKDGMNSs",
+#     "PTKBDGMNzSZcHJW",
+# ]
+# lsets = ["RL", "R", "L", "WY", "RLWY"]
+# ssets = ["S", "Ss", "SsF"]
+# fsets = ["MN", "SK", "MNn", "SsZz"]
+# syllsets = [
+#     "CVV?C",
+#     "CVC",
+#     "CVVC?",
+#     "CVC?",
+#     "CV",
+#     "VC",
+#     "CVF",
+#     "C?VC",
+#     "CVF?",
+#     "CL?VC",
+#     "CL?VF",
+#     "S?CVC",
+#     "S?CVF",
+#     "S?CVC?",
+#     "C?VF",
+#     "C?VC?",
+#     "C?VF?",
+#     "C?L?VC",
+#     "VC",
+#     "CVL?C?",
+#     "C?VL?C",
+#     "C?VLC?",
+# ]
+# vorthos = [
+#     {"a": "á", "e": "é", "i": "í", "u": "ü", "@": "ä", "0": "ö"},
+#     {"a": "au", "e": "ei", "i": "ie", "u": "oo", "@": "ea", "0": "ou"},
+#     {"a": "â", "e": "ê", "i": "y", "u": "w", "@": "à", "0": "ô"},
+#     {"a": "aa", "e": "ee", "i": "ii", "u": "uu", "@": "ai", "0": "oo"},
+# ]
+# corthos = [
+#     {"n": "ng", "x": "kh", "s": "sh", "g": "gh", "z": "zh", "c": "ch"},
+#     {"n": "ñ", "x": "x", "s": "š", "g": "gh", "z": "ž", "c": "č"},
+#     {"n": "ng", "x": "ch", "s": "sch", "g": "gh", "z": "ts", "c": "tsch"},
+#     {"n": "ng", "x": "c", "s": "ch", "g": "gh", "z": "j", "c": "tch"},
+#     {"n": "ng", "x": "c", "s": "x", "g": "g", "z": "zh", "c": "q"},
+# ]
+# restricts = ["Ss", "sS", "LR", "RL", "FS", "Fs", "SS", "ss", r"(.)\1"]
 
 
-def get_language():
+def get_language(family="base"):
+    with open(f"language_families/{family}.json") as fp:
+        family = json.load(fp)
+
     while True:
-        cset = choose(csets)
-        vset = choose(vsets)
-        syll = choose(syllsets, 1)
+        cset = choose(family["csets"])
+        vset = choose(family["vsets"])
+        syll = choose(family["syllsets"], 1)
         if len(cset) ** syll.count("C") * len(vset) * syll.count("V") > 30:
             break
-    fset = choose([cset, random.choice(fsets), cset + random.choice(fsets)])
-    lset = choose(lsets)
-    sset = choose(ssets)
-    ortho = {"'": u"`"}
-    ortho.update(choose(vorthos))
-    ortho.update(choose(corthos))
+
+    fset = choose([cset, random.choice(family["fsets"]), cset + random.choice(family["fsets"])])
+    lset = choose(family["lsets"])
+    sset = choose(family["ssets"])
+    ortho = {"'": "`"}
+    ortho.update(choose(family["vorthos"]))
+    ortho.update(choose(family["corthos"]))
     minlength = random.choice([1, 2])
     if len(syll) < 3:
         minlength += 1
@@ -190,7 +195,7 @@ def get_language():
         phonemes={"V": vset, "C": cset, "L": lset, "F": fset, "S": sset},
         syll=syll,
         ortho=ortho,
-        restricts=restricts,
+        restricts=family["restricts"],
         wordlength=(minlength, maxlength),
     )
     return l
