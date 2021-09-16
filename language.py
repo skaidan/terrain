@@ -48,7 +48,7 @@ class Language(object):
 
     def orthosyll(self):
         s = self.syllable()
-        o = u""
+        o = ""
         for c in s:
             o += self.ortho.get(c, c.lower())
         return o
@@ -214,11 +214,11 @@ def show_language(l):
     ps = set()
     while len(ps) < 10:
         ps.add(l.name("city"))
-    print(u", ".join(ps))
+    print(", ".join(ps))
     ps = set()
     while len(ps) < 10:
         ps.add(l.name("sea"))
-    print(u", ".join(ps))
+    print(", ".join(ps))
     print("* * *")
 
 
