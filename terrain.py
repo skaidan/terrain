@@ -721,7 +721,7 @@ class MapGrid:
         clist = min(itertools.permutations(cities), key=totallength)
         return clist
 
-    RIVER_COLOR = mpl.cm.Blues(0.35)
+    RIVER_COLOR = mpl.cm.Blues(0.55)
 
     def plot(self, filename, rivers=True, cmap=mpl.cm.Greys, **kwargs):
         print("Plotting")
@@ -1089,7 +1089,7 @@ if __name__ == "__main__":
         plt.close("all")
         while True:
             try:
-                m = MapGrid()
+                m = MapGrid(n=2 ** 15)
                 filename = f"tests/{m.mode}-{i:02d}.png"
                 m.plot(filename, dpi=200)
                 break
