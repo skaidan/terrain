@@ -1,0 +1,7 @@
+numpy
+matplotlib
+scipy
+noise
+loremipsum
+tex
+cm-super
