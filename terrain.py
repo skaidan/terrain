@@ -145,14 +145,14 @@ city_counts = {
 }
 terr_counts = {"shore": (3, 7), "island": (2, 4), "mountain": (30, 80), "desert": (3, 5)}
 riverpercs = {"shore": 5, "island": 3, "mountain": 8, "desert": 1}
-forests_counts = {"shore": (20, 60), "island": (25, 35), "mountain": (30, 60), "desert": (2, 5)}
+forests_counts = {"shore": (40, 80), "island": (45, 75), "mountain": (50, 80), "desert": (2, 5)}
 
 class MapException(Exception):
     pass
 
 
 class MapGrid:
-    def __init__(self, mode="shore", n=2 ** (sizemap-2)):
+    def __init__(self, mode="shore", n=2 ** (sizemap)):
         """
         Creates a new MapGrid object
         :param mode: the map making mode
@@ -944,9 +944,9 @@ class MapGrid:
             rivers = mergelines(rivers)
             rivercol = mpl.collections.PathCollection(rivers, capstyle="round", joinstyle="round")
             rivercol.set_edgecolor(self.RIVER_COLOR)
-            rivercol.set_linewidth(3)
+            rivercol.set_linewidth(2)
             rivercol.set_facecolor("none")
-            rivercol.set_zorder(12)
+            rivercol.set_zorder(25)
             rivercol.set_path_effects([pe.SimpleLineShadow((-0.5, 0.0)), pe.Normal()])
             ax.add_collection(rivercol)
         #Draw forests
@@ -958,10 +958,9 @@ class MapGrid:
                         self.vxs[forest, 0],
                         self.vxs[forest, 1],
                         s=5,
-                        alpha=0.9,
+                        alpha=0.5,
                         c="green",
                         zorder=13,
-                        edgecolor="green",
                         linewidth=1.5,
                     )         
 
@@ -995,12 +994,12 @@ class MapGrid:
                 size = "small"
                 ytext = 12
                 stroke_lw = 2
-                zorder = 20.5
+                zorder = 30
             else:
                 size = "x-small"
                 ytext = 8
                 stroke_lw = 2
-                zorder = 20
+                zorder = 30
 
             txt = ax.annotate(
                 xy=self.vxs[city, :],
@@ -1065,7 +1064,7 @@ class MapGrid:
                 va="center",
                 # bbox=labelbox,
                 size="large",
-                zorder=21,
+                zorder=30,
             )
             txt.set_path_effects([pe.Stroke(linewidth=3, foreground="slategrey"), pe.Normal()])
 
@@ -1117,14 +1116,8 @@ class MapGrid:
             print(f"Path between {c1} and {c2}")
             path, _ = self.shortest_path(c1, c2)
 
-            pathcol = mpl.collections.PathCollection(path)
-            pathcol.set_facecolor("green")
-            pathcol.set_edgecolor("red")
-            pathcol.set_linestyle("--")
-            pathcol.set_linewidth(2.5)
-            pathcol.set_zorder(14)
             #ax.add_collection(pathcol)
-            ax.plot(self.vxs[path, 0], self.vxs[path, 1], c="red", zorder=10000, linewidth=3, alpha=0.5)
+            ax.plot(self.vxs[path, 0], self.vxs[path, 1], c="red", zorder=20, linewidth=3, alpha=0.5)
 
 
         #print("Small Roads")
