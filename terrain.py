@@ -1,3 +1,4 @@
+from logging import exception
 import language
 
 import numpy as np
@@ -16,9 +17,10 @@ import gzip
 import itertools
 
 tex = True
+sizemap = 15
 
 if tex:
-    plt.rcParams["text.usetex"] = True
+    plt.rcParams["text.usetex"] = False
     plt.rcParams["font.family"] = "palatino"
 else:
     plt.rcParams["font.family"] = "Palatino Linotype"
@@ -138,19 +140,19 @@ def load(filename):
 city_counts = {
     "shore": (12, 20),
     "island": (5, 10),
-    "mountain": (10, 25),
+    "mountain": (8, 16),
     "desert": (5, 10),
 }
-terr_counts = {"shore": (3, 7), "island": (2, 4), "mountain": (3, 6), "desert": (3, 5)}
+terr_counts = {"shore": (3, 7), "island": (2, 4), "mountain": (30, 80), "desert": (3, 5)}
 riverpercs = {"shore": 5, "island": 3, "mountain": 8, "desert": 1}
-
+forests_counts = {"shore": (40, 80), "island": (45, 75), "mountain": (50, 80), "desert": (2, 5)}
 
 class MapException(Exception):
     pass
 
 
 class MapGrid:
-    def __init__(self, mode="shore", n=2 ** 14):
+    def __init__(self, mode="shore", n=2 ** (sizemap)):
         """
         Creates a new MapGrid object
         :param mode: the map making mode
@@ -171,6 +173,7 @@ class MapGrid:
         self.riverperc = riverpercs[mode] * np.mean(self.elevation > 0)
         self.place_cities(np.random.randint(*city_counts[mode]))
         self.grow_territory(np.random.randint(*terr_counts[mode]))
+        self.place_forests(np.random.randint(*forests_counts[mode]))
         self.name_places()
         self.path_cache = {}
         self.fill_path_cache(self.big_cities)
@@ -562,8 +565,8 @@ class MapGrid:
             newcity = np.argmax(self.city_score)
 
             # Only place cities between 0.1 and 0.9 axes.
-            city_max_ax = 0.85
-            city_min_ax = 0.15
+            city_max_ax = 0.95
+            city_min_ax = 0.05
             # Chance that this location has no city, scales with number of cities placed so far
             if (
                 np.random.random() < (len(self.cities) + 1) ** -0.2
@@ -573,6 +576,9 @@ class MapGrid:
                 self.cities.append(newcity)
 
             # penalize city score for the newcity location.
+
+            #import pdb
+            #pdb.set_trace()
             self.city_score -= 0.01 * 1 / (distance(self.vxs, self.vxs[newcity, :]) + 1e-9)
 
     def edge_weight(self, u, v, territory=False):
@@ -629,13 +635,17 @@ class MapGrid:
         end,
     ):
         try:
-            return self.path_cache[start, end]
+            if self.path_cache[start, end]:
+                return self.path_cache[start, end]
         except KeyError:
             print("WARNING: Uncached path search", start, end)
-            pass
+        except Exception as e:
+            print(e.message)
         best_dir = {}
         q = []
         flipped = False
+
+        length = 0
         if isinstance(end, str):
             flipped = True
             start, end = end, start
@@ -645,17 +655,19 @@ class MapGrid:
             if u in best_dir:
                 continue
             best_dir[u] = v
-            if self.territories[u] == u:
-                path = [u]
-                while path[-1] != end:
-                    path.append(best_dir[path[-1]])
-                if flipped:
-                    self.path_cache[end, u] = path[::-1], dist
-                    print("CACHE", len(self.path_cache))
-                else:
-                    self.path_cache[u, end] = path, dist
-                    print("CACHE", len(self.path_cache))
-            length = dist
+
+            if self.territories[u] < 2 ** (sizemap-3):
+                if self.territories[u] == u:
+                    path = [u]
+                    while path[-1] != end:
+                        path.append(best_dir[path[-1]])
+                    if flipped:
+                        self.path_cache[end, u] = path[::-1], dist
+                        print("CACHE", len(self.path_cache))
+                    else:
+                        self.path_cache[u, end] = path, dist
+                        print("CACHE", len(self.path_cache))
+                length = dist
             if isinstance(start, str) and self.edge[u]:
                 if (start == "topleft" and self.vxs[u, 0] - self.vxs[u, 1] < -0.5) or (
                     start == "bottomright" and self.vxs[u, 0] - self.vxs[u, 1] > 0.5
@@ -667,7 +679,7 @@ class MapGrid:
                     continue
                 est = distance(self.vxs[end, :], self.vxs[w, :]) * 0.85
                 d = dist + self.edge_weight(w, u)
-                heapq.heappush(q, (d + est, d, w, u))
+                heapq.heappush(q, (d + est, d, w, u))        
         path = [start]
         while path[-1] != end:
             path.append(best_dir[path[-1]])
@@ -696,6 +708,31 @@ class MapGrid:
                 newdist = self.edge_weight(u, vx, territory=True)
                 heapq.heappush(q, (dist + newdist, u, city))
         self.territories = done
+    
+    def place_forests(self, n=4):
+        print("Forest")
+        n = (2 ** sizemap) * (n) /100
+        self.forest_score = self.flow ** 0.5
+        self.forest_score[self.elevation[:-1] <= 0] = -9999999
+        self.forests =set([])
+        while len(self.forests) < n:
+            # location of potential new forests is place with maximum score
+            newforests = np.argmax(self.forest_score)
+            if self.forest_score[newforests] == -9999999:
+                break
+            self.forest_score[newforests] = -9999999
+            # Only place forest between 0 and 1 axes.
+            forests_max_ax = 1
+            forests_min_ax = 0
+            # Chance that this location has no forest, scales with number of forests placed so far
+            if (
+                np.random.random() < (len(self.forests) + 1) ** -0.2
+                and forests_min_ax < self.vxs[newforests, 0] < forests_max_ax
+                and forests_min_ax < self.vxs[newforests, 1] < forests_max_ax
+            ):
+                flat_list = [item for sublist in [k for k in self.regions if newforests in k] for item in sublist]
+                self.forests = self.forests.union(flat_list)
+                #self.forests = set([item for sublist in self.forests for item in sublist])
 
     def extend_area(self, area, n):
         for _ in range(10):
@@ -703,8 +740,8 @@ class MapGrid:
             area[adj[adj != -1]] = True
         return area
 
-    def ordered_cities(self):
-        cities = self.big_cities
+    def ordered_cities(self, cities):
+        cities = cities
         dists = {}
         for c in cities:
             for d in cities:
@@ -720,6 +757,21 @@ class MapGrid:
 
         clist = min(itertools.permutations(cities), key=totallength)
         return clist
+    
+    def ordered_cities_region(self, cities):
+        cities = cities
+        dists = {}
+        for c in cities:
+            for d in cities:
+                if c == d:
+                    continue
+                dists[c, d] = self.shortest_path(c, d)[1]
+
+        def totallength(seq):
+            return sum(dists[c, d] for c, d in zip(seq[:-1], seq[1:]))
+
+        clist = min(itertools.permutations(cities), key=totallength)
+        return clist
 
     RIVER_COLOR = mpl.cm.Blues(0.55)
 
@@ -729,7 +781,7 @@ class MapGrid:
         ax = fig.add_axes([0, 0, 1, 1])
 
         # Border patch
-        bw = border_width = 0.1
+        bw = border_width = 0
 
         # Solid border
         vertices = [
@@ -891,16 +943,29 @@ class MapGrid:
             print(len(rivers), sum(land))
             rivers = mergelines(rivers)
             rivercol = mpl.collections.PathCollection(rivers, capstyle="round", joinstyle="round")
-            # rivercol.set_edgecolor("black")
             rivercol.set_edgecolor(self.RIVER_COLOR)
-            rivercol.set_linewidth(1)
+            rivercol.set_linewidth(2)
             rivercol.set_facecolor("none")
-            # rivercol.set_zorder(9)
-            rivercol.set_zorder(12)
+            rivercol.set_zorder(25)
             rivercol.set_path_effects([pe.SimpleLineShadow((-0.5, 0.0)), pe.Normal()])
             ax.add_collection(rivercol)
+        #Draw forests
+        print("Draw forests")
+        print(self.forests)
+        for forest in self.forests:
+            if forest < 2 ** sizemap:
+                    d = ax.scatter(
+                        self.vxs[forest, 0],
+                        self.vxs[forest, 1],
+                        s=5,
+                        alpha=0.5,
+                        c="green",
+                        zorder=13,
+                        linewidth=1.5,
+                    )         
 
         # Draw cities
+        print("Draw cities")
         bigcities = self.big_cities
         smallcities = [c for c in self.cities if c not in bigcities]
         c = ax.scatter(
@@ -929,12 +994,12 @@ class MapGrid:
                 size = "small"
                 ytext = 12
                 stroke_lw = 2
-                zorder = 20.5
+                zorder = 30
             else:
                 size = "x-small"
                 ytext = 8
                 stroke_lw = 2
-                zorder = 20
+                zorder = 30
 
             txt = ax.annotate(
                 xy=self.vxs[city, :],
@@ -977,7 +1042,7 @@ class MapGrid:
                 dists = self.vxs - rl
                 exclude = (np.abs(dists[:, 0]) < 0.15 + w) & (np.abs(dists[:, 1]) < 0.1)
                 scores[exclude] -= 5000
-
+            
             scores[self.elevation[:-1] <= 0] -= 500
             scores[self.vxs[:, 0] > 1.06 - w] -= 50000
             scores[self.vxs[:, 0] < w - 0.06] -= 50000
@@ -990,16 +1055,16 @@ class MapGrid:
             # facecolor='none', edgecolor='red', zorder=19)
             print(f"Labelling {name} at {scores.max():.1f}")
             reglabels.append(xy)
-            label = (r"\sc " + name) if tex else name
+            label = name
 
             txt = ax.annotate(
                 xy=xy,
-                text=label,
+                text= label,
                 ha="center",
                 va="center",
                 # bbox=labelbox,
                 size="large",
-                zorder=21,
+                zorder=30,
             )
             txt.set_path_effects([pe.Stroke(linewidth=3, foreground="slategrey"), pe.Normal()])
 
@@ -1040,20 +1105,48 @@ class MapGrid:
         coastcol.set_linewidth(1.0)
         ax.add_collection(coastcol)
 
-        # clist = self.ordered_cities()
-        # clist = ["topleft"] + list(clist) + ["bottomright"]
-        # for c1, c2 in zip(clist[:-1], clist[1:]):
-        #     print(f"Path between {c1} and {c2}")
-        #     path, _ = self.shortest_path(c1, c2)
-        #     path = mergelines(relaxpts(self.vxs, zip(path[:-1], path[1:])))
-        #     pathcol = mpl.collections.PathCollection(path)
-        #     pathcol.set_facecolor("none")
-        #     pathcol.set_edgecolor("red")
-        #     pathcol.set_linestyle("--")
-        #     pathcol.set_linewidth(2.5)
-        #     pathcol.set_zorder(14)
-        #     ax.add_collection(pathcol)
-        #     # ax.plot(self.vxs[path, 0], self.vxs[path, 1], c="red", zorder=10000, linewidth=2, alpha=0.5)
+        print("Main Road")
+        print(self.big_cities)
+        clist = self.ordered_cities(self.big_cities)
+        #smallcities = [c for c in self.cities if c not in bigcities]
+        for c in clist:
+            print(c)
+        clist = ["topleft"] + list(clist) + ["bottomright"]
+        for c1, c2 in zip(clist[:-1], clist[1:]):
+            print(f"Path between {c1} and {c2}")
+            path, _ = self.shortest_path(c1, c2)
+
+            #ax.add_collection(pathcol)
+            ax.plot(self.vxs[path, 0], self.vxs[path, 1], c="red", zorder=20, linewidth=3, alpha=0.5)
+
+
+        #print("Small Roads")
+        #smallcities = [c for c in self.cities if c not in self.big_cities]
+        #print(smallcities)
+        #print(self.big_cities)
+
+        #for bigcity in self.big_cities:
+        #    regioncity = []
+        #    noregioncity = []
+        #    for smallcity in smallcities:
+        #        if self.territories[smallcity] == bigcity:
+        #            regioncity.append(smallcity)
+        #        else:
+        #            noregioncity.append(smallcity)
+        #    regioncity.append(bigcity)
+        #    print(regioncity)
+        #    #clist = self.ordered_cities_region(regioncity)
+        #    clist = []
+        #    for city in regioncity:
+        #        if city < 2 ** sizemap:
+        #            clist.append(city)
+        #    clist = clist + bigcity
+        #    print(clist)
+
+        #    for c1, c2 in zip(clist[:-1], clist[1:]):
+        #        print(f"Path between {c1} and {c2}")
+        #        path, _ = self.shortest_path(c1, c2)
+        #        ax.plot(self.vxs[path, 0], self.vxs[path, 1], c="red", zorder=10000, linewidth=1, alpha=0.5)
 
         ax.axis("image")
         ax.set_xlim(0.0, 1.0)
@@ -1089,8 +1182,8 @@ if __name__ == "__main__":
         plt.close("all")
         while True:
             try:
-                m = MapGrid(n=2 ** 15)
-                filename = f"tests/{m.mode}-{i:02d}.png"
+                m = MapGrid(n=2 ** sizemap)
+                filename = f"images/{m.mode}-{i:02d}.png"
                 m.plot(filename, dpi=200)
                 break
             except AssertionError:
