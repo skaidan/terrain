@@ -147,18 +147,19 @@ terr_counts = {"shore": (3, 7), "island": (2, 4), "mountain": (30, 80), "desert"
 riverpercs = {"shore": 5, "island": 3, "mountain": 8, "desert": 1}
 forests_counts = {"shore": (40, 80), "island": (45, 75), "mountain": (50, 80), "desert": (2, 5)}
 
+
 class MapException(Exception):
     pass
 
 
 class MapGrid:
-    def __init__(self, mode="desert", n=2 ** (sizemap), cmap = "winter"):
+    def __init__(self, mode="island", n=2 ** (sizemap),cmap="copper"):
         """
         Creates a new MapGrid object
         :param mode: the map making mode
         :param n: number of map grid points
         """
-
+        self.downhill = None
         self.cmap = cmap # summer, autumm, winter, hot, copper, ocean, Oranges, Greens, 
         self._big_cities = []
         self.mode = mode
@@ -567,8 +568,8 @@ class MapGrid:
             newcity = np.argmax(self.city_score)
 
             # Only place cities between 0.1 and 0.9 axes.
-            city_max_ax = 0.95
-            city_min_ax = 0.05
+            city_max_ax = 0.9
+            city_min_ax = 0.1
             # Chance that this location has no city, scales with number of cities placed so far
             if (
                 np.random.random() < (len(self.cities) + 1) ** -0.2
@@ -751,7 +752,6 @@ class MapGrid:
         def totallength(seq):
             seq =  list(seq) 
             return sum(dists[c, d] for c, d in zip(seq[:-1], seq[1:]))
-        
 
 
         def greedy(dists, cities):
@@ -783,8 +783,6 @@ class MapGrid:
                         if dists[k,v] < current_dist:
                             current_dist = dists[k,v]
                             next_pos = v
-                
-
                 if next_pos > 0:
                     print(next_pos)
                     if next_pos not in clists:
@@ -813,7 +811,6 @@ class MapGrid:
                     continue
                 dists[c, d] = self.shortest_path(c, d)[1]
 
-
         def totallength(seq):
             return sum(dists[c, d] for c, d in zip(seq[:-1], seq[1:]))
 
@@ -828,7 +825,7 @@ class MapGrid:
         ax = fig.add_axes([0, 0, 1, 1])
 
         # Border patch
-        bw = border_width = 0
+        bw = border_width = 0.04
 
         # Solid border
         vertices = [
@@ -858,7 +855,7 @@ class MapGrid:
 
 
         path = mpl.path.Path(vertices, codes)
-        patch = mpl.patches.PathPatch(path, fc="lightslategrey", ec="black", zorder=15)
+        patch = mpl.patches.PathPatch(path, fc="grey", ec="white", zorder=105)
         ax.add_patch(patch)
 
         elev = np.where(self.elevation > 0, 0.1, 0)
@@ -903,7 +900,7 @@ class MapGrid:
         slopecol.set_zorder(1)
         slopecol.set_color("black")
         slopecol.set_linewidth(0.3)
-        # ax.add_collection(slopecol)
+        ax.add_collection(slopecol)
 
         # Adjust slope values to fit cmap
         land_slopes = np.array(slopes)
@@ -926,18 +923,18 @@ class MapGrid:
         cmap = self.cmap
 
         # Plot land patches
-        land = np.where(elevs > 0)[0]
-        landpatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land]
-        landpatchcol = mpl.collections.PatchCollection(landpatches, cmap=cmap, ec="face")
+        #land = np.where(elevs > 0)[0]
+        #landpatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land]
+        #landpatchcol = mpl.collections.PatchCollection(landpatches, cmap=cmap, ec="face")
 
-        land_heights = elevations[land]
-        land_heights = land_heights - min(land_heights)
-        land_heights *= 1 / max(land_heights)
-        landpatchcol.set_array(land_angles)
+        #land_heights = elevations[land]
+        #land_heights = land_heights - min(land_heights)
+        #land_heights *= 1 / max(land_heights)
+        #landpatchcol.set_array(land_angles)
         # landpatchcol.set_array(land_slopes)
-        landpatchcol.set_clim([0.0, 1.0])
-        landpatchcol.set_zorder(0)
-        ax.add_collection(landpatchcol)
+        #landpatchcol.set_clim([0.0, 1.0])
+        #landpatchcol.set_zorder(0)
+        #ax.add_collection(landpatchcol)
 
         # Plot sea patches
         sea = np.where(elevs <= 0)[0]
@@ -975,18 +972,65 @@ class MapGrid:
             ax.add_collection(rivercol)
         #Draw forests
         print("Drawing forests")
-        for forest in self.forests:
-            if forest < 2 ** sizemap:
-                    d = ax.scatter(
-                        self.vxs[forest, 0],
-                        self.vxs[forest, 1],
-                        s=5,
-                        alpha=0.5,
-                        c="green",
-                        zorder=13,
-                        linewidth=1.5,
-                    )         
 
+        #for forest in self.forests:
+        #    if forest < 2 ** sizemap:
+        #            d = ax.scatter(
+        #                self.vxs[forest, 0],
+        #                self.vxs[forest, 1],
+        #                s=5,
+        #                alpha=0.5,
+        #                c="green",
+        #                zorder=13,
+        #                linewidth=1.5,
+        #            )
+
+
+
+        def forests_to_coordinates(sizemap, forests):
+            import pdb
+            pdb.set_trace()
+            coordinates = []
+            size = sizemap
+            if (size % 2) != 0:
+                size += 1
+            sizex = 2 ** (size/2)
+
+            imagesizex = 1200
+            imagesizey = 1200
+
+
+            for forest in forests:
+                x = forest // sizex
+                if x == 0:
+                    x = x + 1
+                y = forest % x
+
+                x = imagesizex - x * (imagesizex/sizex)
+                y = y * (imagesizey/sizex)
+
+                coordinates.append([x,y])
+
+            return coordinates
+        
+        #TO-DO ... transformada de visualización para hacer que eje 0,0 empiece arriba a la derecha y para que coincida el eje con el tamaño de la foto
+
+        #coordinates = forests_to_coordinates(sizemap, self.forests)
+
+        #coordinates.append([0.25,0.25])
+        #coordinates.append([0.25,-0.25])
+        #coordinates.append([-0.25,0.25])
+        #coordinates.append([-0.25,-0.25])
+        #coordinates.append([02.5,02.5])
+        #coordinates.append([25,25])
+        #coordinates.append([50,50])
+        #coordinates.append([75,75])
+
+        #print(coordinates)
+        #forestcol = mpl.collections.RegularPolyCollection(numsides=5, sizes=(50,), facecolor="green", alpha=0.5, offsets=coordinates,zorder =150)
+        
+        #ax.add_collection(forestcol)
+        #ax.autoscale_view()
         # Draw cities
         print("Draw cities")
         bigcities = self.big_cities
@@ -1127,8 +1171,6 @@ class MapGrid:
         print("Main Road")
         print(self.big_cities)
         clist = self.ordered_cities(self._big_cities)
-        for c in clist:
-            print(c)
         clist = ["topleft"] + list(clist) + ["bottomright"]
         for c1, c2 in zip(clist[:-1], clist[1:]):
             print(f"Path between {c1} and {c2}")
@@ -1160,8 +1202,9 @@ if __name__ == "__main__":
         plt.close("all")
         while True:
             try:
+                j = np.random.random()
                 m = MapGrid(n=2 ** sizemap)
-                filename = f"images/{m.mode}-{i:02d}.png"
+                filename = f"images/{m.mode}-{j}.png"
                 m.plot(filename, dpi=200)
                 break
             except AssertionError:
