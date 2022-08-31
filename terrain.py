@@ -138,9 +138,9 @@ def load(filename):
 
 
 city_counts = {
-    "shore": (12, 20),
-    "island": (5, 10),
-    "mountain": (8, 16),
+    "shore": (15, 30),
+    "island": (15, 25),
+    "mountain": (10, 40),
     "desert": (5, 10),
 }
 terr_counts = {"shore": (3, 7), "island": (2, 4), "mountain": (30, 80), "desert": (3, 5)}
@@ -153,7 +153,7 @@ class MapException(Exception):
 
 
 class MapGrid:
-    def __init__(self, mode="island", n=2 ** (sizemap),cmap="copper"):
+    def __init__(self, mode="shore", n=2 ** (sizemap),cmap="copper"):
         """
         Creates a new MapGrid object
         :param mode: the map making mode
@@ -341,7 +341,7 @@ class MapGrid:
         mixing = 1 / (1 + np.exp(-mix))
         print("MIX:", mixing.max(), mixing.min(), mixing.mean())
         self.elevation[:-1] = mixing * hm2 + (1 - mixing) * hm1
-        self.clean_coast()
+        #self.clean_coast()
 
     def shore_heightmap(self):
         print("Calculating elevations")
@@ -369,7 +369,7 @@ class MapGrid:
         self.do_erosion(100, 0.025)
 
         self.raise_sealevel(np.random.randint(sealevel, sealevel + 20))
-        self.clean_coast()
+        #self.clean_coast()
 
     def island_heightmap(self):
         self.erodability[:] = np.exp(np.random.normal(0, 4))
@@ -397,7 +397,7 @@ class MapGrid:
 
         sealevel = np.random.randint(85, 92)
         self.raise_sealevel(sealevel)
-        self.clean_coast()
+        #self.clean_coast()
 
     def mountain_heightmap(self):
         theta = np.random.random() * 2 * np.pi
@@ -710,8 +710,8 @@ class MapGrid:
     
     def place_forests(self, n=4):
         print("Forest")
-        n = (2 ** sizemap) * (n) /100
-        self.forest_score = self.flow ** 0.5
+        n = (2 ** sizemap) * (n) /1
+        self.forest_score = self.flow ** 0.5 * np.random.random()
         self.forest_score[self.elevation[:-1] <= 0] = -9999999
         self.forests =set([])
         while len(self.forests) < n:
@@ -720,18 +720,20 @@ class MapGrid:
             if self.forest_score[newforests] == -9999999:
                 break
             self.forest_score[newforests] = -9999999
-            # Only place forest between 0 and 1 axes.
-            forests_max_ax = 1
-            forests_min_ax = 0
+            # Only place forest between 0.95 and 0.05 axes.
+            forests_max_ax = 0.95
+            forests_min_ax = 0.05
             # Chance that this location has no forest, scales with number of forests placed so far
             if (
-                np.random.random() < (len(self.forests) + 1) ** -0.2
-                and forests_min_ax < self.vxs[newforests, 0] < forests_max_ax
-                and forests_min_ax < self.vxs[newforests, 1] < forests_max_ax
+                True
             ):
                 flat_list = [item for sublist in [k for k in self.regions if newforests in k] for item in sublist]
-                self.forests = self.forests.union(flat_list)
-                #self.forests = set([item for sublist in self.forests for item in sublist])
+                cleaned_flat_list = []
+                for item in flat_list:
+                    if self.forest_score[item] == -9999999:
+                        break
+                    cleaned_flat_list.append(item)
+                self.forests = self.forests.union(cleaned_flat_list)
 
     def extend_area(self, area, n):
         for _ in range(10):
@@ -752,7 +754,6 @@ class MapGrid:
         def totallength(seq):
             seq =  list(seq) 
             return sum(dists[c, d] for c, d in zip(seq[:-1], seq[1:]))
-
 
         def greedy(dists, cities):
             clists = []
@@ -897,7 +898,7 @@ class MapGrid:
                 slopelines.append([(x - l, y - l * s), (x + l, y + l * s)])
 
         slopecol = mpl.collections.LineCollection(slopelines)
-        slopecol.set_zorder(1)
+        slopecol.set_zorder(1000)
         slopecol.set_color("black")
         slopecol.set_linewidth(0.3)
         ax.add_collection(slopecol)
@@ -923,18 +924,18 @@ class MapGrid:
         cmap = self.cmap
 
         # Plot land patches
-        #land = np.where(elevs > 0)[0]
-        #landpatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land]
-        #landpatchcol = mpl.collections.PatchCollection(landpatches, cmap=cmap, ec="face")
+        land = np.where(elevs > 0)[0]
+        landpatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land]
+        landpatchcol = mpl.collections.PatchCollection(landpatches, cmap=cmap, ec="face")
 
-        #land_heights = elevations[land]
-        #land_heights = land_heights - min(land_heights)
-        #land_heights *= 1 / max(land_heights)
-        #landpatchcol.set_array(land_angles)
-        # landpatchcol.set_array(land_slopes)
-        #landpatchcol.set_clim([0.0, 1.0])
-        #landpatchcol.set_zorder(0)
-        #ax.add_collection(landpatchcol)
+        land_heights = elevations[land]
+        land_heights = land_heights - min(land_heights)
+        land_heights *= 1 / max(land_heights)
+        landpatchcol.set_array(land_angles)
+        landpatchcol.set_array(land_slopes)
+        landpatchcol.set_clim([0.0, 1.0])
+        landpatchcol.set_zorder(0)
+        ax.add_collection(landpatchcol)
 
         # Plot sea patches
         sea = np.where(elevs <= 0)[0]
@@ -973,17 +974,17 @@ class MapGrid:
         #Draw forests
         print("Drawing forests")
 
-        #for forest in self.forests:
-        #    if forest < 2 ** sizemap:
-        #            d = ax.scatter(
-        #                self.vxs[forest, 0],
-        #                self.vxs[forest, 1],
-        #                s=5,
-        #                alpha=0.5,
-        #                c="green",
-        #                zorder=13,
-        #                linewidth=1.5,
-        #            )
+        for forest in self.forests:
+            if forest < 2 ** sizemap:
+                    d = ax.scatter(
+                        self.vxs[forest, 0],
+                        self.vxs[forest, 1],
+                        s=5,
+                        alpha=0.2,
+                        c="green",
+                        zorder=13,
+                        linewidth=1.5,
+                    )
 
 
 
@@ -996,8 +997,8 @@ class MapGrid:
                 size += 1
             sizex = 2 ** (size/2)
 
-            imagesizex = 1200
-            imagesizey = 1200
+            imagesizex = 2000
+            imagesizey = 2000
 
 
             for forest in forests:
@@ -1017,20 +1018,21 @@ class MapGrid:
 
         #coordinates = forests_to_coordinates(sizemap, self.forests)
 
-        #coordinates.append([0.25,0.25])
-        #coordinates.append([0.25,-0.25])
-        #coordinates.append([-0.25,0.25])
-        #coordinates.append([-0.25,-0.25])
-        #coordinates.append([02.5,02.5])
-        #coordinates.append([25,25])
-        #coordinates.append([50,50])
-        #coordinates.append([75,75])
+        coordinates = []
+        coordinates.append([0.25,0.25])
+        coordinates.append([0.25,-0.25])
+        coordinates.append([-0.25,0.25])
+        coordinates.append([-0.25,-0.25])
+        coordinates.append([02.5,02.5])
+        coordinates.append([25,25])
+        coordinates.append([50,50])
+        coordinates.append([75,75])
 
-        #print(coordinates)
-        #forestcol = mpl.collections.RegularPolyCollection(numsides=5, sizes=(50,), facecolor="green", alpha=0.5, offsets=coordinates,zorder =150)
+        print(coordinates)
+        forestcol = mpl.collections.RegularPolyCollection(numsides=5, sizes=(50,), facecolor="green", alpha=0.5, offsets=coordinates,zorder =150)
         
-        #ax.add_collection(forestcol)
-        #ax.autoscale_view()
+        ax.add_collection(forestcol)
+        ax.autoscale_view()
         # Draw cities
         print("Draw cities")
         bigcities = self.big_cities
