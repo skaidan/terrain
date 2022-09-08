@@ -1,23 +1,25 @@
-from logging import exception
-import language
+import gzip
+import heapq
+import itertools
+import pickle
+from collections import defaultdict
 
-import numpy as np
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
-import scipy.spatial as spl
+import matplotlib.pyplot as plt
+import noise
+import numpy as np
 import scipy.sparse as spa
 import scipy.sparse.csgraph as csg
 import scipy.sparse.linalg as sla
-from collections import defaultdict
-import heapq
-import noise
-import pickle
-import gzip
-import itertools
+import scipy.spatial as spl
+
+import language
 
 tex = True
 sizemap = 15
+seed_value = 1000000
+np.random.seed(seed_value)
 
 if tex:
     plt.rcParams["text.usetex"] = False
@@ -32,8 +34,7 @@ def distance(a, b):
     disp2 = (a - b) ** 2
     if len(disp2.shape) == 2:
         return np.sum(disp2, 1) ** 0.5
-    else:
-        return np.sum(disp2) ** 0.5
+    return np.sum(disp2) ** 0.5
 
 
 def trislope(xys, zs):
@@ -133,8 +134,8 @@ def mergelines(segs):
 
 
 def load(filename):
-    with gzip.open(filename) as f:
-        return pickle.loads(f.read())
+    with gzip.open(filename) as file:
+        return pickle.loads(file.read())
 
 
 city_counts = {
@@ -143,9 +144,19 @@ city_counts = {
     "mountain": (10, 40),
     "desert": (5, 10),
 }
-terr_counts = {"shore": (3, 7), "island": (2, 4), "mountain": (30, 80), "desert": (3, 5)}
+terr_counts = {
+    "shore": (3, 7),
+    "island": (2, 4),
+    "mountain": (30, 80),
+    "desert": (3, 5),
+}
 riverpercs = {"shore": 5, "island": 3, "mountain": 8, "desert": 1}
-forests_counts = {"shore": (40, 80), "island": (45, 75), "mountain": (50, 80), "desert": (2, 5)}
+forests_counts = {
+    "shore": (40, 80),
+    "island": (45, 75),
+    "mountain": (50, 80),
+    "desert": (2, 5),
+}
 
 
 class MapException(Exception):
@@ -153,14 +164,14 @@ class MapException(Exception):
 
 
 class MapGrid:
-    def __init__(self, mode="shore", n=2 ** (sizemap),cmap="copper"):
+    def __init__(self, mode="shore", n=2 ** (sizemap), cmap="copper"):
         """
         Creates a new MapGrid object
         :param mode: the map making mode
         :param n: number of map grid points
         """
         self.downhill = None
-        self.cmap = cmap # summer, autumm, winter, hot, copper, ocean, Oranges, Greens, 
+        self.cmap = cmap  # summer, autumm, winter, hot, copper, ocean, Oranges, Greens,
         self._big_cities = []
         self.mode = mode
         self.lang = language.get_language()
@@ -185,8 +196,8 @@ class MapGrid:
     @property
     def big_cities(self):
         if len(self._big_cities) < 1:
-            print ( 'Loading main cities ' )
-            self._big_cities= [c for c in self.cities if self.territories[c] == c]
+            print("Loading main cities ")
+            self._big_cities = [c for c in self.cities if self.territories[c] == c]
         return self._big_cities
 
     def save(self, filename):
@@ -317,7 +328,12 @@ class MapGrid:
         if base is None:
             base = np.random.randint(1000)
 
-        perlin_noise = np.array([noise.pnoise2(x, y, lacunarity=1.7, octaves=3, base=base) for x, y in self.vxs])
+        perlin_noise = np.array(
+            [
+                noise.pnoise2(x, y, lacunarity=1.7, octaves=3, base=base)
+                for x, y in self.vxs
+            ]
+        )
         return perlin_noise
 
     def distort_vxs(self):
@@ -341,20 +357,27 @@ class MapGrid:
         mixing = 1 / (1 + np.exp(-mix))
         print("MIX:", mixing.max(), mixing.min(), mixing.mean())
         self.elevation[:-1] = mixing * hm2 + (1 - mixing) * hm1
-        #self.clean_coast()
+        # self.clean_coast()
 
     def shore_heightmap(self):
         print("Calculating elevations")
         n = self.nvxs
         self.elevation = np.zeros(n + 1)
-        self.elevation[:-1] = 0.5 + ((self.dvxs - 0.5) * np.random.normal(0, 4, (1, 2))).sum(1)
+        self.elevation[:-1] = 0.5 + (
+            (self.dvxs - 0.5) * np.random.normal(0, 4, (1, 2))
+        ).sum(1)
         self.elevation[:-1] += -4 * (np.random.random() - 0.5) * distance(self.vxs, 0.5)
         mountains = np.random.random((50, 2))
         for m in mountains:
-            self.elevation[:-1] += np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05 ** 2)) ** 2
+            self.elevation[:-1] += (
+                np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05**2)) ** 2
+            )
         print("Edge height:", self.elevation[:-1][self.edge].max())
 
-        along = (((self.dvxs - 0.5) * np.random.normal(0, 2, (1, 2))).sum(1) + np.random.normal(0, 0.5)) * 10
+        along = (
+            ((self.dvxs - 0.5) * np.random.normal(0, 2, (1, 2))).sum(1)
+            + np.random.normal(0, 0.5)
+        ) * 10
         self.erodability = np.exp(4 * np.arctan(along))
 
         for i in range(5):
@@ -369,7 +392,7 @@ class MapGrid:
         self.do_erosion(100, 0.025)
 
         self.raise_sealevel(np.random.randint(sealevel, sealevel + 20))
-        #self.clean_coast()
+        # self.clean_coast()
 
     def island_heightmap(self):
         self.erodability[:] = np.exp(np.random.normal(0, 4))
@@ -397,7 +420,7 @@ class MapGrid:
 
         sealevel = np.random.randint(85, 92)
         self.raise_sealevel(sealevel)
-        #self.clean_coast()
+        # self.clean_coast()
 
     def mountain_heightmap(self):
         theta = np.random.random() * 2 * np.pi
@@ -407,7 +430,9 @@ class MapGrid:
         self.elevation[:-1] = 50 - 10 * np.abs(x)
         mountains = np.random.random((50, 2))
         for m in mountains:
-            self.elevation[:-1] += np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05 ** 2)) ** 2
+            self.elevation[:-1] += (
+                np.exp(-distance(self.vxs, m) ** 2 / (2 * 0.05**2)) ** 2
+            )
         self.erodability[:] = np.exp(50 - 10 * self.elevation[:-1])
         for _ in range(5):
             self.rift()
@@ -439,7 +464,7 @@ class MapGrid:
         if self.elevation.max() > 0:
             self.elevation /= self.elevation.max()
         self.elevation[self.elevation < 0] = 0
-        self.elevation = self.elevation ** 0.5
+        self.elevation = self.elevation**0.5
 
     def calc_elevation_pts(self):
         npts = self.pts.shape[0]
@@ -467,13 +492,15 @@ class MapGrid:
 
     def calc_slopes(self):
         dist = distance(self.vxs, self.vxs[self.downhill, :])
-        self.slope = (self.elevation[:-1] - self.elevation[self.downhill]) / (dist + 1e-9)
+        self.slope = (self.elevation[:-1] - self.elevation[self.downhill]) / (
+            dist + 1e-9
+        )
         self.slope[self.downhill == -1] = 0
 
     def erode(self, max_step=0.05):
         """Perform erosion on the height map."""
-        riverrate = -self.flow ** 0.5 * self.slope  # river erosion
-        sloperate = -self.slope ** 2 * self.erodability  # slope smoothing
+        riverrate = -self.flow**0.5 * self.slope  # river erosion
+        sloperate = -self.slope**2 * self.erodability  # slope smoothing
         rate = 1000 * riverrate + sloperate
         rate[self.elevation[:-1] <= 0] = 0
         self.elevation[:-1] += rate / np.abs(rate).max() * max_step
@@ -495,7 +522,9 @@ class MapGrid:
 
     def find_lowest_sill(self, sinks):
         h = 10000
-        edges = np.where((sinks != -1) & np.any((sinks[self.adj_mat] == -1) & self.adj_mat != -1, 1))[0]
+        edges = np.where(
+            (sinks != -1) & np.any((sinks[self.adj_mat] == -1) & self.adj_mat != -1, 1)
+        )[0]
 
         for u in edges:
             adjs = [v for v in self.adj_vxs[u] if v != -1]
@@ -560,7 +589,7 @@ class MapGrid:
 
         :params n: Number of cities to place
         """
-        self.city_score = self.flow ** 0.5
+        self.city_score = self.flow**0.5
         self.city_score[self.elevation[:-1] <= 0] = -9999999
         self.cities = []
         while len(self.cities) < n:
@@ -578,7 +607,9 @@ class MapGrid:
             ):
                 self.cities.append(newcity)
 
-            self.city_score -= 0.01 * 1 / (distance(self.vxs, self.vxs[newcity, :]) + 1e-9)
+            self.city_score -= (
+                0.01 * 1 / (distance(self.vxs, self.vxs[newcity, :]) + 1e-9)
+            )
 
     def edge_weight(self, u, v, territory=False):
         horiz = distance(self.vxs[u, :], self.vxs[v, :])
@@ -626,7 +657,9 @@ class MapGrid:
                     p.insert(0, preds[i, p[0]])
                 p = [x for x in p if x < n]
                 d = dists[i, b]
-                self.path_cache["topleft" if a == n else a, "bottomright" if b == n + 1 else b] = (p, d)
+                self.path_cache[
+                    "topleft" if a == n else a, "bottomright" if b == n + 1 else b
+                ] = (p, d)
 
     def shortest_path(
         self,
@@ -655,7 +688,7 @@ class MapGrid:
                 continue
             best_dir[u] = v
 
-            if self.territories[u] < 2 ** (sizemap-3):
+            if self.territories[u] < 2 ** (sizemap - 3):
                 if self.territories[u] == u:
                     path = [u]
                     while path[-1] != end:
@@ -678,10 +711,11 @@ class MapGrid:
                     continue
                 est = distance(self.vxs[end, :], self.vxs[w, :]) * 0.85
                 d = dist + self.edge_weight(w, u)
-                heapq.heappush(q, (d + est, d, w, u))        
+                heapq.heappush(q, (d + est, d, w, u))
         path = [start]
         while path[-1] != end:
-            path.append(best_dir[path[-1]])
+            if self.elevation[best_dir[path[-1]]] > 0:
+                path.append(best_dir[path[-1]])
         if flipped:
             self.path_cache[end, start] = path[::-1], length
             print("CACHE", len(self.path_cache))
@@ -707,13 +741,13 @@ class MapGrid:
                 newdist = self.edge_weight(u, vx, territory=True)
                 heapq.heappush(q, (dist + newdist, u, city))
         self.territories = done
-    
+
     def place_forests(self, n=4):
         print("Forest")
-        n = (2 ** sizemap) * (n) /1
-        self.forest_score = self.flow ** 0.5 * np.random.random()
+        n = (2**sizemap) * (n) / 1
+        self.forest_score = self.flow**0.5 * np.random.random()
         self.forest_score[self.elevation[:-1] <= 0] = -9999999
-        self.forests =set([])
+        self.forests = set([])
         while len(self.forests) < n:
             # location of potential new forests is place with maximum score
             newforests = np.argmax(self.forest_score)
@@ -724,10 +758,12 @@ class MapGrid:
             forests_max_ax = 0.95
             forests_min_ax = 0.05
             # Chance that this location has no forest, scales with number of forests placed so far
-            if (
-                True
-            ):
-                flat_list = [item for sublist in [k for k in self.regions if newforests in k] for item in sublist]
+            if True:
+                flat_list = [
+                    item
+                    for sublist in [k for k in self.regions if newforests in k]
+                    for item in sublist
+                ]
                 cleaned_flat_list = []
                 for item in flat_list:
                     if self.forest_score[item] == -9999999:
@@ -750,15 +786,16 @@ class MapGrid:
                     continue
                 dists[c, d] = self.shortest_path(c, d)[1]
 
-        print (dists)
+        print(dists)
+
         def totallength(seq):
-            seq =  list(seq) 
+            seq = list(seq)
             return sum(dists[c, d] for c, d in zip(seq[:-1], seq[1:]))
 
         def greedy(dists, cities):
             clists = []
             initial = min(dists, key=dists.get)
-            clists = [ initial[0], initial[1]]
+            clists = [initial[0], initial[1]]
             current = initial[1]
 
             try:
@@ -769,20 +806,20 @@ class MapGrid:
                 cities.remove(initial[1])
             except Exception as e:
                 pass
-            while(len(cities)>1):
+            while len(cities) > 1:
                 current_dist = 10000000
                 next_pos = -1
-                dists= {}
+                dists = {}
 
                 for d in cities:
                     if current == d or d in clists:
                         continue
-                    dists[current,d] = self.shortest_path(current, d)[1]
+                    dists[current, d] = self.shortest_path(current, d)[1]
 
-                for k,v in dists:
+                for k, v in dists:
                     if k == current:
-                        if dists[k,v] < current_dist:
-                            current_dist = dists[k,v]
+                        if dists[k, v] < current_dist:
+                            current_dist = dists[k, v]
                             next_pos = v
                 if next_pos > 0:
                     print(next_pos)
@@ -802,7 +839,7 @@ class MapGrid:
 
         clist = greedy(dists, cities)
         return clist
-    
+
     def ordered_cities_region(self, cities):
         cities = cities
         dists = {}
@@ -854,7 +891,6 @@ class MapGrid:
             mpl.path.Path.LINETO,
         ]
 
-
         path = mpl.path.Path(vertices, codes)
         patch = mpl.patches.PathPatch(path, fc="grey", ec="white", zorder=105)
         ax.add_patch(patch)
@@ -870,7 +906,7 @@ class MapGrid:
         # Plot slope lines
         slopelines = []
         slopes = []
-        r = 0.25 * self.nvxs ** -0.5
+        r = 0.25 * self.nvxs**-0.5
         for i in goodidxs:
             # Do not put slope lines in ocean
             if self.elevation[i] <= 0:
@@ -887,18 +923,25 @@ class MapGrid:
                 continue
 
             x, y = self.vxs[i, :]
-            l = r * (1 + np.random.random()) * (1 - 0.2 * np.arctan(s) ** 2) * np.exp(s2 / 100)
+            l = (
+                r
+                * (1 + np.random.random())
+                * (1 - 0.2 * np.arctan(s) ** 2)
+                * np.exp(s2 / 100)
+            )
             if abs(l * s) > 2 * r:
                 n = int(abs(l * s / r))
                 l /= n
                 uv = np.random.normal(0, r / 2, (min(n, 4), 2))
                 for u, v in uv:
-                    slopelines.append([(x + u - l, y + v - l * s), (x + u + l, y + v + l * s)])
+                    slopelines.append(
+                        [(x + u - l, y + v - l * s), (x + u + l, y + v + l * s)]
+                    )
             else:
                 slopelines.append([(x - l, y - l * s), (x + l, y + l * s)])
 
         slopecol = mpl.collections.LineCollection(slopelines)
-        slopecol.set_zorder(1000)
+        slopecol.set_zorder(15)
         slopecol.set_color("black")
         slopecol.set_linewidth(0.3)
         ax.add_collection(slopecol)
@@ -920,13 +963,17 @@ class MapGrid:
         land_slopes += 0.5
         land_angles += 0.5
 
-        #cmap = "copper"
+        # cmap = "copper"
         cmap = self.cmap
 
         # Plot land patches
         land = np.where(elevs > 0)[0]
-        landpatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land]
-        landpatchcol = mpl.collections.PatchCollection(landpatches, cmap=cmap, ec="face")
+        landpatches = [
+            mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in land
+        ]
+        landpatchcol = mpl.collections.PatchCollection(
+            landpatches, cmap=cmap, ec="face"
+        )
 
         land_heights = elevations[land]
         land_heights = land_heights - min(land_heights)
@@ -940,14 +987,20 @@ class MapGrid:
         # Plot sea patches
         sea = np.where(elevs <= 0)[0]
         if len(sea) > 0:
-            seapatches = [mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in sea]
-            seapatchcol = mpl.collections.PatchCollection(seapatches, cmap="Blues", ec="face")
+            seapatches = [
+                mpl.patches.Polygon(self.pts[tris[i], :], closed=True) for i in sea
+            ]
+            seapatchcol = mpl.collections.PatchCollection(
+                seapatches, cmap="Blues", ec="face"
+            )
 
             # Random range of narrow range of cmap
             sea_heights = elevations[sea]
             sea_heights = abs(sea_heights) - min(sea_heights)
             sea_heights *= 1 / max(sea_heights)
-            sea_colors = sea_heights * 0.80 + 0.10 + np.random.random(len(sea_heights)) * 0.02
+            sea_colors = (
+                sea_heights * 0.80 + 0.10 + np.random.random(len(sea_heights)) * 0.02
+            )
             seapatchcol.set_array(sea_colors)
             seapatchcol.set_clim([0.0, 1.0])
             seapatchcol.set_zorder(10)
@@ -961,78 +1014,35 @@ class MapGrid:
                 & (self.downhill != -1)
                 & (self.flow > np.percentile(self.flow, 100 - self.riverperc))
             )
-            rivers = relaxpts(self.vxs, [(u, self.downhill[u]) for u in range(self.nvxs) if land[u]])
+            rivers = relaxpts(
+                self.vxs, [(u, self.downhill[u]) for u in range(self.nvxs) if land[u]]
+            )
             print(len(rivers), sum(land))
             rivers = mergelines(rivers)
-            rivercol = mpl.collections.PathCollection(rivers, capstyle="round", joinstyle="round")
+            rivercol = mpl.collections.PathCollection(
+                rivers, capstyle="round", joinstyle="round"
+            )
             rivercol.set_edgecolor(self.RIVER_COLOR)
             rivercol.set_linewidth(2)
             rivercol.set_facecolor("none")
             rivercol.set_zorder(25)
             rivercol.set_path_effects([pe.SimpleLineShadow((-0.5, 0.0)), pe.Normal()])
             ax.add_collection(rivercol)
-        #Draw forests
+        # Draw forests
         print("Drawing forests")
 
         for forest in self.forests:
-            if forest < 2 ** sizemap:
-                    d = ax.scatter(
-                        self.vxs[forest, 0],
-                        self.vxs[forest, 1],
-                        s=5,
-                        alpha=0.2,
-                        c="green",
-                        zorder=13,
-                        linewidth=1.5,
-                    )
+            if forest < 2**sizemap:
+                d = ax.scatter(
+                    self.vxs[forest, 0],
+                    self.vxs[forest, 1],
+                    s=5,
+                    alpha=0.2,
+                    c="green",
+                    zorder=13,
+                    linewidth=1.5,
+                )
 
-
-
-        def forests_to_coordinates(sizemap, forests):
-            import pdb
-            pdb.set_trace()
-            coordinates = []
-            size = sizemap
-            if (size % 2) != 0:
-                size += 1
-            sizex = 2 ** (size/2)
-
-            imagesizex = 2000
-            imagesizey = 2000
-
-
-            for forest in forests:
-                x = forest // sizex
-                if x == 0:
-                    x = x + 1
-                y = forest % x
-
-                x = imagesizex - x * (imagesizex/sizex)
-                y = y * (imagesizey/sizex)
-
-                coordinates.append([x,y])
-
-            return coordinates
-        
-        #TO-DO ... transformada de visualización para hacer que eje 0,0 empiece arriba a la derecha y para que coincida el eje con el tamaño de la foto
-
-        #coordinates = forests_to_coordinates(sizemap, self.forests)
-
-        coordinates = []
-        coordinates.append([0.25,0.25])
-        coordinates.append([0.25,-0.25])
-        coordinates.append([-0.25,0.25])
-        coordinates.append([-0.25,-0.25])
-        coordinates.append([02.5,02.5])
-        coordinates.append([25,25])
-        coordinates.append([50,50])
-        coordinates.append([75,75])
-
-        print(coordinates)
-        forestcol = mpl.collections.RegularPolyCollection(numsides=5, sizes=(50,), facecolor="green", alpha=0.5, offsets=coordinates,zorder =150)
-        
-        ax.add_collection(forestcol)
-        ax.autoscale_view()
         # Draw cities
         print("Draw cities")
         bigcities = self.big_cities
@@ -1081,7 +1091,12 @@ class MapGrid:
                 zorder=zorder,
             )
             # Add stroke to text label
-            txt.set_path_effects([pe.Stroke(linewidth=stroke_lw, foreground="lightsteelblue"), pe.Normal()])
+            txt.set_path_effects(
+                [
+                    pe.Stroke(linewidth=stroke_lw, foreground="lightsteelblue"),
+                    pe.Normal(),
+                ]
+            )
 
         # Draw region labels
         reglabels = []
@@ -1110,7 +1125,7 @@ class MapGrid:
                 dists = self.vxs - rl
                 exclude = (np.abs(dists[:, 0]) < 0.15 + w) & (np.abs(dists[:, 1]) < 0.1)
                 scores[exclude] -= 5000
-            
+
             scores[self.elevation[:-1] <= 0] -= 500
             scores[self.vxs[:, 0] > 1.06 - w] -= 50000
             scores[self.vxs[:, 0] < w - 0.06] -= 50000
@@ -1125,13 +1140,15 @@ class MapGrid:
 
             txt = ax.annotate(
                 xy=xy,
-                text= label,
+                text=label,
                 ha="center",
                 va="center",
                 size="large",
                 zorder=30,
             )
-            txt.set_path_effects([pe.Stroke(linewidth=3, foreground="slategrey"), pe.Normal()])
+            txt.set_path_effects(
+                [pe.Stroke(linewidth=3, foreground="slategrey"), pe.Normal()]
+            )
 
         # Make borders and coasts
         borders = []
@@ -1144,7 +1161,11 @@ class MapGrid:
             p1, p2 = rp
             if not (good[v1] and good[v2]):
                 continue
-            if self.territories[v1] != self.territories[v2] and self.elevation[v1] > 0 and self.elevation[v2] > 0:
+            if (
+                self.territories[v1] != self.territories[v2]
+                and self.elevation[v1] > 0
+                and self.elevation[v2] > 0
+            ):
                 borders.append((p1, p2))
             if (self.elevation[v1] > 0 and self.elevation[v2] <= 0) or (
                 self.elevation[v2] > 0 and self.elevation[v1] <= 0
@@ -1178,8 +1199,14 @@ class MapGrid:
             print(f"Path between {c1} and {c2}")
             path, _ = self.shortest_path(c1, c2)
 
-            ax.plot(self.vxs[path, 0], self.vxs[path, 1], c="red", zorder=20, linewidth=3, alpha=0.5)
-
+            ax.plot(
+                self.vxs[path, 0],
+                self.vxs[path, 1],
+                c="blue",
+                zorder=20,
+                linewidth=3,
+                alpha=0.9,
+            )
 
         ax.axis("image")
         ax.set_xlim(0.0, 1.0)
@@ -1205,7 +1232,7 @@ if __name__ == "__main__":
         while True:
             try:
                 j = np.random.random()
-                m = MapGrid(n=2 ** sizemap)
+                m = MapGrid(n=2**sizemap)
                 filename = f"images/{m.mode}-{j}.png"
                 m.plot(filename, dpi=200)
                 break
